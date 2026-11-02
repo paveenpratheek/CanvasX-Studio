@@ -1,0 +1,9 @@
+[submodule "notex"]
+	path = notex
+	url = https://github.com/paveenpratheek/NoteX.git
+[submodule "ragx"]
+	path = ragx
+	url = https://github.com/paveenpratheek/RAGX.git
+[submodule "canvasx"]
+	path = canvasx
+	url = https://github.com/paveenpratheek/CanvasX.git

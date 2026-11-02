@@ -1,0 +1,16 @@
+{
+  "name": "notex-studio",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "description": "NoteX, RAGX and CanvasX together on one PC: canvases, embedded documents, and agents to chat with, from one command",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "setup": "node studio/setup.js",
+    "start": "node studio/start.js",
+    "test": "node --test test/*.test.js"
+  }
+}

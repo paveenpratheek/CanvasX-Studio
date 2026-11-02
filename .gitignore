@@ -1,2 +1,4 @@
 .gitx/*
 !.gitx/commits/
+node_modules/
+studio.config.json
