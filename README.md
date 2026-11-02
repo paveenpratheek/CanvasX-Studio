@@ -15,7 +15,7 @@ Each project lives in its own repository. NoteX Studio brings the three together
 | [Node.js](https://nodejs.org) **24 or newer** | Runs everything | Yes |
 | [Git](https://git-scm.com) | Fetches the three projects | Yes |
 | **Chrome or Edge** | The pages; CanvasX needs their folder access | Yes |
-| [Ollama](https://ollama.com) | Embeds your documents (setup downloads the model, about 300 MB) | For search by meaning. Without it, search is by keyword only |
+| [Ollama](https://ollama.com) | Embeds your documents (setup downloads embeddinggemma-2, about 670 MB; RAGX's Settings can download and switch to others) | For search by meaning. Without it, search is by keyword only |
 | [Claude Code](https://claude.com/claude-code), signed in with your own account | Agents on your canvases and RAGX's answers | For chat and agents |
 | Google Antigravity (`agy`), signed in | The Gemini models, as an alternative to Claude | Optional |
 
