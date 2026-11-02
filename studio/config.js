@@ -2,7 +2,9 @@
  *
  *   studio.config.json   beside this repository's package.json, optional,
  *                        git-ignored: { dataDir, ports: { studio, ragx,
- *                        notex, canvasx }, open }
+ *                        notex, canvasx, phone }, open, setup }
+ *                        - setup is the first-run setup's progress
+ *                        (t-2b5970444b), written by the studio itself
  *
  * The data folder holds plugins/<id> for each engine, the layout
  * ter-manager gives its plugins, so RAGX finds NoteX's documents at
@@ -20,7 +22,8 @@ export const DEFAULTS = Object.freeze({
   dataDir: path.join(os.homedir(), 'NoteX Studio'),
   // RAGX and NoteX keep the ports they have in ter-manager; CanvasX keeps the
   // one NoteX's CanvasX link accepts (t-b2251cde5d).
-  ports: Object.freeze({ studio: 7075, ragx: 7780, notex: 7781, canvasx: 9075 }),
+  // phone: CanvasXP, reached from the phone as localhost:8080 through adb (t-d4739a5f8f).
+  ports: Object.freeze({ studio: 7075, ragx: 7780, notex: 7781, canvasx: 9075, phone: 8080 }),
   open: true,
 });
 
@@ -60,7 +63,16 @@ export function loadConfig({ file = CONFIG_FILE, overrides = {} } = {}) {
   }
   const dataDir = path.resolve(overrides.dataDir || fromFile.dataDir || DEFAULTS.dataDir);
   const open = overrides.open ?? fromFile.open ?? DEFAULTS.open;
-  return { dataDir, ports, open: Boolean(open), file };
+  const setup = fromFile.setup && typeof fromFile.setup === 'object' ? fromFile.setup : {};
+  return { dataDir, ports, open: Boolean(open), file, setup };
+}
+
+/* Some settings written into the file, keeping whatever else it holds. */
+export function saveConfigFile(file, patch) {
+  const now = readConfigFile(file);
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify({ ...now, ...patch }, null, 2) + '\n');
+  fs.renameSync(tmp, file);
 }
 
 /* Where a plugin keeps what it must not lose, as ter-manager's host.dataDir answers. */

@@ -3,6 +3,8 @@
  * (t-33bd14605d). A page's identity is the frame its message came from,
  * never anything the message says about itself.
  */
+import { initSetup } from './setup.js';
+
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
@@ -236,3 +238,8 @@ dark.addEventListener('change', applyTheme);
 build();
 pollEngines();
 setInterval(pollEngines, 3000);
+
+/* First run: no canvas folder yet, so the setup screen comes first (t-2b5970444b).
+ * When it ends, the pages load again with their folders set. */
+const setup = initSetup({ hostApi, toast, canvasxUrl: BOOT.canvasx, onDone: () => { for (const f of frames.values()) f.src = f.src; } });
+setup.open();

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { ROOT, loadConfig, plugins, cliOf, pluginDir } from './config.js';
 import { ManagedEngine, engineSpecs } from './engines.js';
 import { createStudioServer, createStaticServer, listen } from './host.js';
+import { FirstRun } from './firstrun.js';
 
 export function parseArgs(argv) {
   const o = { ports: {} };
@@ -21,7 +22,7 @@ export function parseArgs(argv) {
     if (a === '--no-open') o.open = false;
     else if (a === '--open') o.open = true;
     else if (a === '--data') o.dataDir = val();
-    else if (/^--(studio|ragx|notex|canvasx)-port$/.test(a)) o.ports[a.slice(2, -5)] = val();
+    else if (/^--(studio|ragx|notex|canvasx|phone)-port$/.test(a)) o.ports[a.slice(2, -5)] = val();
     else if (a === '-h' || a === '--help') o.help = true;
     else throw new Error(`Unknown option ${a} - see npm start -- --help.`);
   }
@@ -31,7 +32,7 @@ export function parseArgs(argv) {
 const HELP = `npm start [-- options]
   --data <folder>        where NoteX and RAGX keep their data (default ~/NoteX Studio)
   --no-open              do not open the browser
-  --studio-port N  --ragx-port N  --notex-port N  --canvasx-port N
+  --studio-port N  --ragx-port N  --notex-port N  --canvasx-port N  --phone-port N
 Settings can also live in studio.config.json beside package.json.`;
 
 /* What setup must have done, each with the fix. */
@@ -78,8 +79,11 @@ async function main() {
   const config = loadConfig({ overrides: args });
   const plugs = plugins();
   for (const p of Object.values(plugs)) pluginSetup(p);
-  const logDir = path.join(config.dataDir, 'logs');
-  fs.mkdirSync(logDir, { recursive: true });
+  // Logs follow the data folder, which the setup may move (t-c3a090b64a).
+  const logTo = (id, line) => {
+    const dir = path.join(config.dataDir, 'logs');
+    fs.mkdir(dir, { recursive: true }, () => fs.appendFile(path.join(dir, `${id}.log`), `${new Date().toISOString()} ${line}\n`, () => {}));
+  };
 
   for (const [what, port] of [['RAGX engine', config.ports.ragx], ['NoteX engine', config.ports.notex]]) {
     if (!(await portFree(port))) throw new Error(`Port ${port} (${what}) is in use - is it already running, perhaps in ter-manager? Stop that, or set another port in studio.config.json.`);
@@ -87,20 +91,33 @@ async function main() {
 
   const engines = {};
   for (const spec of Object.values(engineSpecs(config, plugs))) {
-    const file = path.join(logDir, `${spec.id}.log`);
-    const e = new ManagedEngine(spec, { log: (line) => fs.appendFile(file, `${new Date().toISOString()} ${line}\n`, () => {}) });
+    const e = new ManagedEngine(spec, { log: (line) => logTo(spec.id, line) });
     e.on('state', (s) => console.log(`  ${s.label.padEnd(5)} ${s.state}${s.url ? ` at ${s.url}` : ''}${s.detail ? ` - ${s.detail}` : ''}`));
     engines[spec.id] = e;
   }
 
-  const studio = createStudioServer({ config, plugs, engines, log: (s) => console.log(`  ${s}`) });
+  const say = (s) => console.log(`  ${s}`);
+  const firstRun = new FirstRun({ config, plugs, engines, log: say });
+  const studio = createStudioServer({ config, plugs, engines, firstRun, log: say });
   const canvasx = createStaticServer({ root: path.join(ROOT, 'canvasx'), port: config.ports.canvasx });
   await listen(studio.server, config.ports.studio, 'NoteX Studio');
   await listen(canvasx.server, config.ports.canvasx, 'CanvasX');
+  /* CanvasXP for the phone, built fresh from CanvasX each start (t-d4739a5f8f).
+   * Only the phone needs it, so a port in use is said, not fatal. */
+  const xpBuilt = spawnSync(process.execPath, [path.join(ROOT, 'canvasx', 'xp', 'make.js')], { cwd: path.join(ROOT, 'canvasx'), encoding: 'utf8' });
+  const phone = createStaticServer({ root: path.join(ROOT, 'canvasx', 'xp', 'site'), port: config.ports.phone });
+  let phoneUp = false;
+  if (xpBuilt.status !== 0) say(`CanvasXP could not be built: ${(xpBuilt.stderr || xpBuilt.stdout || '').trim().split('\n').pop()}`);
+  else {
+    try { await listen(phone.server, config.ports.phone, 'CanvasXP'); phoneUp = true; } catch (e) {
+      say(`CanvasXP for the phone is not served: port ${config.ports.phone} is in use. If that is CanvasXP already, the phone setup still works.`);
+    }
+  }
 
   const url = `http://127.0.0.1:${config.ports.studio}/`;
   console.log(`NoteX Studio at ${url}`);
   console.log(`  CanvasX    http://127.0.0.1:${config.ports.canvasx}/`);
+  if (phoneUp) console.log(`  CanvasXP   http://127.0.0.1:${config.ports.phone}/ (the phone opens it as localhost:${config.ports.phone})`);
   console.log(`  data       ${config.dataDir}`);
   console.log('  Ctrl+C stops everything.');
   // RAGX first: NoteX hands it images and drops once both run.
@@ -116,6 +133,7 @@ async function main() {
     await Promise.all(Object.values(engines).map((e) => e.stop().catch(() => {})));
     studio.server.close();
     canvasx.server.close();
+    if (phoneUp) phone.server.close();
     process.exit(0);
   };
   process.on('SIGINT', stop);

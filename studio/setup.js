@@ -9,6 +9,7 @@
  * sign-in - Claude Code and Google Antigravity.
  */
 import { spawn, spawnSync } from 'node:child_process';
+import { Adb } from './firstrun.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -104,6 +105,11 @@ async function main() {
   const agy = findAgy();
   if (agy) ok('Google Antigravity (agy)', 'Gemini models are available - sign in once if you have not');
   else no('Google Antigravity (agy)', 'optional: install Antigravity for the Gemini models', false);
+
+  // The phone: adb sets up CanvasXP on it (t-c247850a37); the setup screen offers to download it.
+  const adb = new Adb().path();
+  if (adb) ok('adb, for the phone', adb);
+  else no('adb, for the phone', 'optional: the setup screen in the studio downloads it when you set up a phone', false);
   return finish();
 }
 

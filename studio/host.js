@@ -104,7 +104,7 @@ export function studioPage({ token, config, plugs, publicDir }) {
   return html.replace('%%TOKEN%%', attr(token)).replace('%%BOOT%%', attr(JSON.stringify(boot)));
 }
 
-export function createStudioServer({ config, plugs, engines, token = crypto.randomBytes(24).toString('hex'), publicDir = path.join(ROOT, 'studio', 'public'), terminal = openTerminal, log = () => {} }) {
+export function createStudioServer({ config, plugs, engines, firstRun = null, token = crypto.randomBytes(24).toString('hex'), publicDir = path.join(ROOT, 'studio', 'public'), terminal = openTerminal, log = () => {} }) {
   const port = config.ports.studio;
   const origins = studioOrigins(config);
   const same = (a, b) => { const x = Buffer.from(String(a || '')), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
@@ -149,7 +149,35 @@ export function createStudioServer({ config, plugs, engines, token = crypto.rand
         return json(res, 200, await terminal({ cwd: body.cwd ? String(body.cwd) : '', cmd, title: body.title ? String(body.title) : p.label }));
       } catch (e) { return refuse(res, 500, e.message); }
     }
+    if (firstRun && route.startsWith('setup')) return setupApi(req, res, route);
     return refuse(res, 404, 'No such route.');
+  }
+
+  /* The first-run setup's routes (t-2b5970444b); studio/firstrun.js does the work. */
+  async function setupApi(req, res, route) {
+    const body = async () => { try { return await readBody(req); } catch (_) { throw Object.assign(new Error('The request is not JSON.'), { status: 400 }); } };
+    const get = req.method === 'GET';
+    const post = req.method === 'POST';
+    try {
+      if (get && route === 'setup') return json(res, 200, await firstRun.status());
+      if (post && route === 'setup/pick') { const b = await body(); return json(res, 200, await firstRun.pickFolder({ title: b.title, initial: b.initial })); }
+      if (post && route === 'setup/folders') { const b = await body(); return json(res, 200, await firstRun.applyFolders({ canvas: b.canvas, data: b.data })); }
+      if (post && route === 'setup/relay') { const b = await body(); return json(res, 200, await firstRun.relay(String(b.id || ''), String(b.method || 'GET').toUpperCase(), String(b.path || ''), b.body)); }
+      if (post && route === 'setup/done') { const b = await body(); return json(res, 200, { setup: firstRun.finish({ phone: b.phone || null }) }); }
+      if (get && route === 'setup/phone') return json(res, 200, await firstRun.phoneStatus());
+      if (post && route === 'setup/phone/adb') return json(res, 200, await firstRun.downloadAdb());
+      const pm = /^setup\/phone\/(open|find|link)$/.exec(route);
+      if (post && pm) {
+        const serial = String((await body()).serial || '');
+        if (!serial) return refuse(res, 400, 'Say which phone (serial).');
+        const fn = { open: 'openOnPhone', find: 'findOnPhone', link: 'linkPhone' }[pm[1]];
+        return json(res, 200, await firstRun[fn](serial));
+      }
+      return refuse(res, 404, 'No such route.');
+    } catch (e) {
+      if (!e.status) log(`setup: ${e.stack || e.message}`);
+      return json(res, e.status || 500, { error: { message: e.message, code: e.code || 'failed' } });
+    }
   }
 
   const server = http.createServer(async (req, res) => {

@@ -15,10 +15,16 @@
   <nav class="tabs" id="tabs" role="tablist" aria-label="Pages"></nav>
   <div class="right">
     <div class="engines" id="engines" aria-label="Engines"></div>
+    <button class="btn" id="setup-btn" type="button" title="The folders, the embedding model and the phone, step by step">Setup</button>
     <a class="btn" id="canvasx" target="_blank" rel="noopener" title="CanvasX opens in a tab of its own, where it can open your workspace folder">Open CanvasX <span aria-hidden="true">↗</span></a>
   </div>
 </header>
 <main id="frames"></main>
+
+<section class="setup" id="setup" hidden aria-label="Setup">
+  <button class="btn setup-close" id="setup-close" type="button" title="Close the setup; the Setup button opens it again">Close</button>
+  <div class="setup-card" id="setup-card"></div>
+</section>
 
 <dialog id="logs" aria-labelledby="logs-title">
   <div class="sheet">
