@@ -124,3 +124,23 @@ test('the setup routes stand behind the studio token, and refuse what is not on 
   assert.equal(phone.adb, null);
   assert.match(phone.download.url, /^https:\/\/dl\.google\.com\/android\/repository\/platform-tools-latest-/);
 });
+
+test('a file deleted while it is being served never takes the server down (t-514f8b964d)', async (t) => {
+  const { createStaticServer } = await import('../studio/host.js');
+  const d = tmp(t);
+  const f = path.join(d, 'runtime.json');
+  fs.writeFileSync(f, '{"url":"http://127.0.0.1:1"}');
+  const { server } = createStaticServer({ root: d, port: 7396 });
+  await listen(server, 7396, 'test');
+  t.after(() => server.close());
+  // The engine stopping deletes its runtime.json right after the server has looked at it.
+  const realStat = fs.statSync;
+  fs.statSync = (p, ...rest) => { const st = realStat(p, ...rest); if (path.resolve(String(p)) === f) fs.rmSync(f, { force: true }); return st; };
+  t.after(() => { fs.statSync = realStat; });
+  let status;
+  try { status = (await fetch('http://127.0.0.1:7396/runtime.json')).status; } catch (_) { status = 'cut'; }
+  fs.statSync = realStat;
+  assert.ok(status === 404 || status === 'cut', `answered ${status}`);
+  fs.writeFileSync(f, '{"ok":true}');
+  assert.equal((await fetch('http://127.0.0.1:7396/runtime.json')).status, 200, 'the server still answers');
+});

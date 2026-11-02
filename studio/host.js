@@ -48,18 +48,28 @@ export function fileIn(base, urlPath) {
   return file;
 }
 
+/* The file is opened before anything is sent and read through that handle:
+ * an engine deletes its runtime.json as it stops, and a file gone between a
+ * stat and an open once ended the whole studio with an unhandled stream
+ * error (t-514f8b964d, t-2f8fdb051e). */
 function sendFile(res, file, { head = false, index = 'index.html' } = {}) {
   let f = file;
+  try { if (fs.statSync(f).isDirectory()) f = path.join(f, index); } catch (_) { return false; }
+  let fd;
+  try { fd = fs.openSync(f, 'r'); } catch (_) { return false; }
   let st;
-  try { st = fs.statSync(f); if (st.isDirectory()) { f = path.join(f, index); st = fs.statSync(f); } } catch (_) { return false; }
-  if (!st.isFile()) return false;
+  try { st = fs.fstatSync(fd); } catch (_) { fs.closeSync(fd); return false; }
+  if (!st.isFile()) { fs.closeSync(fd); return false; }
   res.writeHead(200, {
     'content-type': TYPES[path.extname(f).toLowerCase()] || 'application/octet-stream',
     'content-length': st.size,
     // runtime.json changes with every engine start; the pages read it fresh.
     'cache-control': 'no-store',
   });
-  if (head) res.end(); else fs.createReadStream(f).pipe(res);
+  if (head) { fs.closeSync(fd); res.end(); return true; }
+  const stream = fs.createReadStream(null, { fd, autoClose: true });
+  stream.on('error', () => res.destroy());
+  stream.pipe(res);
   return true;
 }
 
