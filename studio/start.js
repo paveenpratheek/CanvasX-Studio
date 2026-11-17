@@ -25,6 +25,7 @@ export function parseArgs(argv) {
     const val = () => { if (i + 1 >= argv.length) throw new Error(`${a} needs a value.`); return argv[++i]; };
     if (a === '--no-open') o.open = false;
     else if (a === '--open') o.open = true;
+    else if (a === '--open-canvasx') o.openCanvasx = true;
     else if (a === '--data') o.dataDir = val();
     else if (a === '--canvasx-origin') (o.canvasxOrigins = o.canvasxOrigins || []).push(val());
     else if (/^--(studio|ragx|notex|canvasx|phone)-port$/.test(a)) o.ports[a.slice(2, -5)] = val();
@@ -37,6 +38,7 @@ export function parseArgs(argv) {
 const HELP = `npm start [-- options]
   --data <folder>        where NoteX and RAGX keep their data (default ~/CanvasX Studio)
   --no-open              do not open the browser
+  --open-canvasx         open CanvasX rather than the studio page, once the setup is done
   --canvasx-origin <url> a CanvasX served elsewhere (e.g. http://localhost:5500) that may
                          find the studio and open NoteX and RAGX in its tab; kept for later runs
   --studio-port N  --ragx-port N  --notex-port N  --canvasx-port N  --phone-port N
@@ -150,7 +152,8 @@ async function main() {
     engines.rag.start();
     engines.notex.start();
   }
-  if (config.open) openBrowser(url);
+  // The portable copy opens CanvasX; a first run opens the setup instead (t-43690a6e2d).
+  if (config.open) openBrowser(args.openCanvasx && canvasxUp && !hold ? `http://127.0.0.1:${config.ports.canvasx}/` : url);
 
   let stopping = false;
   const stop = async () => {

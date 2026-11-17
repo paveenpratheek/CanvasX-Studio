@@ -18,7 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { ROOT, DEFAULTS, saveConfigFile, canvasxOrigins, NOTEX_CANVASX_ORIGINS } from './config.js';
 import { engineSpecs } from './engines.js';
-import { checkDeps, installSteps, Jobs, PLATFORMS, findAgy, writeNotexConfig } from './deps.js';
+import { checkDeps, installSteps, Jobs, PLATFORMS, findAgy, writeNotexConfig, freshPath } from './deps.js';
 import { openTerminal } from './terminal.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -268,6 +268,8 @@ export class FirstRun {
       throw new SetupError(409, 'Stop NoteX and RAGX first - their files are in use while they run.');
     }
     this.log(`Setup: installing ${id}`);
+    // A program's own installer runs where the user sees it and answers it (t-1edca66f55).
+    if (plan.terminal) { await this.terminal({ cwd: os.homedir(), cmd: plan.terminal, title: plan.title || 'CanvasX Studio' }); return { opened: true }; }
     return { job: this.jobs.start(id, plan.steps, { detach: plan.detach }) };
   }
 
@@ -287,6 +289,8 @@ export class FirstRun {
 
   /* NoteX's config.json in the data folder, before NoteX starts there. */
   prepareNotex() {
+    // A program installed while the studio runs is found by the engines too (t-1edca66f55).
+    freshPath();
     const p = PLATFORMS[this.setupState().agent];
     return writeNotexConfig(path.join(this.config.dataDir, 'plugins', 'notex', 'config.json'), {
       model: p ? p.notexModel : null,

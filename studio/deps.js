@@ -33,6 +33,35 @@ export const PLATFORMS = Object.freeze({
   gemini: { id: 'gemini', label: 'Google Antigravity', exe: 'agy', notexModel: 'gemini-3.8-flash-medium', ragxAgent: 'agy', signin: 'agy', link: LINKS.agy },
 });
 
+/* The official one-line installers, as each one's own documentation gives
+ * them (code.claude.com/docs/en/setup, ollama.com/download), run when the
+ * user presses Install, in a terminal window they watch (t-1edca66f55). */
+export function installer(id, platform = process.platform) {
+  const ps = (url) => `powershell -NoProfile -ExecutionPolicy Bypass -Command "irm ${url} | iex"`;
+  const win = platform === 'win32';
+  if (id === 'claude') return win ? ps('https://claude.ai/install.ps1') : 'curl -fsSL https://claude.ai/install.sh | bash';
+  if (id === 'ollama') return win ? ps('https://ollama.com/install.ps1') : 'curl -fsSL https://ollama.com/install.sh | sh';
+  return null;
+}
+
+/* Where those installers put their programs. One installed while the studio
+ * runs is not on its PATH yet, so these folders are added before every
+ * check and before the engines start, and the engines inherit them. */
+export function knownBins(env = process.env, platform = process.platform) {
+  const home = env.USERPROFILE || env.HOME || '';
+  const dirs = [home && path.join(home, '.local', 'bin')];
+  if (platform === 'win32' && env.LOCALAPPDATA) dirs.push(path.join(env.LOCALAPPDATA, 'Programs', 'Ollama'), path.join(env.LOCALAPPDATA, 'agy', 'bin'));
+  return dirs.filter(Boolean);
+}
+export function freshPath(env = process.env, platform = process.platform, exists = fs.existsSync) {
+  const key = Object.keys(env).find((k) => k.toLowerCase() === 'path') || 'PATH';
+  const parts = String(env[key] || '').split(path.delimiter).filter(Boolean);
+  const have = new Set(parts.map((p) => path.resolve(p).toLowerCase()));
+  const add = knownBins(env, platform).filter((d) => exists(d) && !have.has(path.resolve(d).toLowerCase()));
+  if (add.length) env[key] = [...parts, ...add].join(path.delimiter);
+  return add;
+}
+
 const OLLAMA_URL = 'http://127.0.0.1:11434';
 const quote = (s) => (/[\s"&|<>^()]/.test(s) ? `"${String(s).replace(/"/g, '""')}"` : s);
 
@@ -110,10 +139,13 @@ export class Jobs {
 export async function checkDeps({ root, plugs, nodeVersion = process.version, check = version, fetcher = fetch, agy = findAgy, platform = process.platform, launcher = registered }) {
   const out = [];
   const add = (d) => { out.push(d); return d; };
+  freshPath(process.env, platform);
   const major = Number(String(nodeVersion).replace(/^v/, '').split('.')[0]);
   add({ id: 'node', label: 'Node.js', group: 'pc', state: major >= 24 ? 'ok' : 'missing', detail: major >= 24 ? nodeVersion : `${nodeVersion} - CanvasX Studio needs 24 or newer`, link: LINKS.node });
-  const git = await check('git');
-  add({ id: 'git', label: 'Git', group: 'pc', state: git ? 'ok' : 'missing', detail: git || 'fetches NoteX, RAGX and CanvasX, and their updates', link: LINKS.git });
+  // A portable copy came complete and has no repository to update, so Git is not asked for there (t-43690a6e2d).
+  const cloned = fs.existsSync(path.join(root, '.git'));
+  const git = cloned ? await check('git') : null;
+  if (cloned) add({ id: 'git', label: 'Git', group: 'pc', state: git ? 'ok' : 'missing', detail: git || 'fetches NoteX, RAGX and CanvasX, and their updates', link: LINKS.git });
 
   const absent = [...Object.values(plugs).map(cliOf), path.join(root, 'canvasx', 'index.html')].filter((f) => !fs.existsSync(f));
   add({ id: 'projects', label: 'NoteX, RAGX and CanvasX', group: 'studio', state: absent.length ? 'missing' : 'ok',
@@ -126,7 +158,8 @@ export async function checkDeps({ root, plugs, nodeVersion = process.version, ch
 
   const ollama = await check('ollama');
   const up = ollama ? await ollamaUp(fetcher) : false;
-  add({ id: 'ollama', label: 'Ollama', group: 'pc', state: !ollama ? 'missing' : up ? 'ok' : 'missing', detail: !ollama ? 'RAGX embeds your documents with it - without it, search is by keyword only' : up ? `${ollama}, running` : `${ollama}, not running`, link: ollama ? undefined : LINKS.ollama, install: Boolean(ollama && !up), optional: true });
+  // Installed and stopped: started here. Not installed: its own installer, in a terminal (t-1edca66f55).
+  add({ id: 'ollama', label: 'Ollama', group: 'pc', state: !ollama ? 'missing' : up ? 'ok' : 'missing', detail: !ollama ? 'RAGX embeds your documents with it - without it, search is by keyword only' : up ? `${ollama}, running` : `${ollama}, not running`, link: ollama ? undefined : LINKS.ollama, install: !up, installAs: ollama ? 'ollama' : 'ollama-get', optional: true });
 
   // CanvasX's Start the server, through a link this user's Windows hands to the studio (t-41a81632a9).
   if (platform === 'win32') {
@@ -137,7 +170,7 @@ export async function checkDeps({ root, plugs, nodeVersion = process.version, ch
 
   const claude = await check('claude');
   const agyAt = await agy({ check });
-  add({ id: 'claude', label: 'Claude Code', group: 'agent', state: claude ? 'ok' : 'missing', detail: claude || 'not installed', link: LINKS.claude });
+  add({ id: 'claude', label: 'Claude Code', group: 'agent', state: claude ? 'ok' : 'missing', detail: claude || 'not installed', link: LINKS.claude, install: !claude, installAs: 'claude-get' });
   add({ id: 'agy', label: 'Google Antigravity', group: 'agent', state: agyAt ? 'ok' : 'missing', detail: agyAt ? (agyAt === 'agy' ? 'agy on PATH' : agyAt) : 'not installed', link: LINKS.agy, path: agyAt });
   return out;
 }
@@ -154,6 +187,9 @@ export function installSteps(id, { root, plugs }) {
     case 'pages': return { steps: Object.values(plugs).map((p) => [node, [cliOf(p), 'plugin-setup'], p.repo]) };
     case 'ollama': return { steps: [['ollama', ['serve'], root]], detach: true };
     case 'launcher': return { steps: registerSteps(root) };
+    // The programs' own installers, in a terminal window the user watches (t-1edca66f55).
+    case 'ollama-get': return { terminal: installer('ollama'), title: 'Installing Ollama' };
+    case 'claude-get': return { terminal: installer('claude'), title: 'Installing Claude Code' };
     default: return null;
   }
 }

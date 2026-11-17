@@ -201,12 +201,17 @@ export function initSetup({ hostApi, toast, canvasxUrl, onDone, embedded = false
         const needed = NEEDED.includes(d.id);
         it.set(failed || needed ? 'bad' : 'ask', d.label, failed ? job.error : d.detail);
         if (d.install) {
-          const b = el('button', 'sx-btn small', d.id === 'ollama' ? 'Start Ollama' : d.id === 'launcher' ? 'Set it up' : failed ? 'Try again' : 'Install');
+          const how = d.installAs || d.id;
+          const b = el('button', 'sx-btn small', how === 'ollama' ? 'Start Ollama' : how === 'ollama-get' ? 'Install Ollama' : d.id === 'launcher' ? 'Set it up' : failed ? 'Try again' : 'Install');
           b.type = 'button';
           b.addEventListener('click', async () => {
             b.disabled = true;
             asked.add(d.id);
-            try { await hostApi('POST', 'setup/deps/install', { id: d.id }); } catch (e) { toast(e.message, true); }
+            try {
+              const r = await hostApi('POST', 'setup/deps/install', { id: how });
+              // A program's own installer runs in a terminal window; this list notices it once it is done (t-1edca66f55).
+              if (r.opened) toast(`${d.label}'s installer opened in a terminal window - answer it there; this list updates once it is done.`);
+            } catch (e) { toast(e.message, true); }
             paint();
           });
           extra.append(b);
@@ -281,16 +286,40 @@ export function initSetup({ hostApi, toast, canvasxUrl, onDone, embedded = false
         box.append(card);
         if (on && !installed(p)) {
           const get = el('div', 'sx-inline');
-          const again = el('button', 'sx-btn small', 'Check again');
-          again.type = 'button';
-          again.addEventListener('click', async () => { try { S.deps = (await depsOf()).deps; } catch (_) {} if (alive(run)) paint(); });
-          get.append(el('span', 'sx-aside', `Install ${p.label}, sign in once, then check again.`), linkBtn(PLAT_LINK[p.id], `Get ${p.label}`), again);
+          const dep = S.deps.find((x) => x.id === p.dep) || {};
+          // Claude Code installs from here with its own installer; Antigravity is a download (t-1edca66f55).
+          if (dep.install && dep.installAs) {
+            const inst = el('button', 'sx-btn small primary', `Install ${p.label}`);
+            inst.type = 'button';
+            inst.addEventListener('click', async () => {
+              inst.disabled = true;
+              try {
+                await hostApi('POST', 'setup/deps/install', { id: dep.installAs });
+                msg.className = 'sx-note';
+                msg.textContent = `${p.label}'s installer opened in a terminal window. Answer it there - this screen notices it once it is installed.`;
+              } catch (e) { msg.className = 'sx-note bad'; msg.textContent = e.message; inst.disabled = false; }
+            });
+            get.append(inst);
+          }
+          get.append(linkBtn(PLAT_LINK[p.id], `Get ${p.label}`), el('span', 'sx-aside', 'This screen checks again by itself.'));
           box.append(get);
         }
       }
     };
     const PLAT_LINK = Object.fromEntries(PLAT.map((p) => [p.id, (S.deps.find((x) => x.id === p.dep) || {}).link || '#']));
     paint();
+    // Until the chosen agent is installed, look again every few seconds (t-1edca66f55).
+    while (alive(run)) {
+      await wait(4000);
+      const chosen = PLAT.find((p) => p.id === S.agent);
+      if (!alive(run) || !chosen || installed(chosen)) continue;
+      try { S.deps = (await depsOf()).deps; } catch (_) { continue; }
+      if (alive(run) && installed(chosen)) {
+        paint();
+        msg.className = 'sx-note';
+        msg.textContent = `${chosen.label} is installed. Press Sign in to sign in once, then Continue.`;
+      }
+    }
   }
 
   /* ---------------------------------------------------------- engines */

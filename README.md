@@ -38,8 +38,8 @@ npm start
 
 The studio opens on a setup screen and walks you through:
 
-1. **Check:** what CanvasX Studio needs on this PC. What it owns - NoteX, RAGX and CanvasX, RAGX's packages, each page's link to its engine - it installs with **Install**, and it starts Ollama if Ollama is installed but stopped. Node.js, Git, Ollama, Claude Code and Antigravity come from their own sites; each has a **Get** link, and the list updates once you have installed one. On Windows, **Start from CanvasX** registers a `canvasx-studio://` link for your Windows account only, so CanvasX's **Start the server** can start the studio.
-2. **Agent:** choose **Claude Code** or **Google Antigravity**. Only that one is set up: NoteX's default model and RAGX's agent are set to it. **Sign in…** opens a terminal running it, where you sign in once.
+1. **Check:** what CanvasX Studio needs on this PC. What it owns - NoteX, RAGX and CanvasX, RAGX's packages, each page's link to its engine - it installs with **Install**, and it starts Ollama if Ollama is installed but stopped. Node.js, Git and Antigravity come from their own sites, each with a **Get** link. Ollama and Claude Code have an **Install** button too: it runs their own one-line installer in a terminal window you can watch. The list updates by itself once something is installed. On Windows, **Start from CanvasX** registers a `canvasx-studio://` link for your Windows account only, so CanvasX's **Start the server** can start the studio.
+2. **Agent:** choose **Claude Code** or **Google Antigravity**. Only that one is set up: NoteX's default model and RAGX's agent are set to it. If it is not installed, **Install Claude Code** runs its installer (Antigravity has a download link), and the screen notices once it is there. **Sign in…** opens a terminal running it, where you sign in once with your own account.
 3. **Start NoteX and RAGX.**
 4. **Folders:** one for your canvases, one for RAGX's and NoteX's files. **Browse…** opens your computer's own folder picker.
 5. **Setting up:** the embedding model downloads, unless Ollama already has it. You can choose another model there. NoteX and RAGX are then pointed at your folders. Then **Open CanvasX** and choose the same canvas folder there once, so your browser lets CanvasX use it.
@@ -70,6 +70,22 @@ CanvasX finds the studio at `http://127.0.0.1:7075`. The studio answers CanvasX'
 - In the **RAGX** tab, drop documents into **Library**, then ask about them in **Ask**. To make a canvas searchable in RAGX, open it in NoteX and press **Keep in RAGX**.
 - To give a canvas to the agent, assign it to the agent in CanvasX or NoteX, then chat with the agent from CanvasX's agent panel.
 - With the phone plugged in, press **Phone attached - sync** in NoteX's Phone view.
+
+## A portable copy
+
+To hand CanvasX Studio to someone with nothing installed, build a portable copy for Windows x64:
+
+```bash
+npm run bundle
+```
+
+This makes `dist/CanvasX Studio/` and `dist/CanvasX Studio-win-x64.zip`. Inside the folder:
+- `node/node.exe`: the official Node.js runtime, downloaded from nodejs.org and checked against its published SHA-256.
+- The code as committed, from git: CanvasX Studio, NoteX, RAGX and CanvasX. Nothing uncommitted or private goes in.
+- RAGX's packages, already installed.
+- **`CanvasX Studio.cmd`**: double-click it to start. The first time, the setup opens; after that, CanvasX does.
+
+They unzip it anywhere and double-click `CanvasX Studio.cmd`, with no Node.js, Git or npm to install. The agents (Claude Code or Antigravity, signed in with their own account) and Ollama still need installing; the setup offers to do that. Windows may say the file is from the internet: **More info**, then **Run anyway**.
 
 ## Settings
 
@@ -119,6 +135,7 @@ Both servers listen on 127.0.0.1 only. The studio's own API needs the token writ
 | `studio/firstrun.js` | the setup screen's work: folder picker, data folder, engine calls, adb and the phone |
 | `studio/deps.js` | what the setup checks and installs, and the two agent platforms |
 | `studio/launch.js`, `studio/launcher.js` | the `canvasx-studio://start` link: registering it, and starting the studio from it |
+| `studio/bundle.js` | `npm run bundle`: the portable copy for Windows x64 |
 | `studio/public/setup.js` | the setup screen |
 | `studio/public/` | the studio page and `plugin-host.js` |
 | `notex/`, `ragx/`, `canvasx/` | the three projects (git submodules) |

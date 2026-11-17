@@ -159,7 +159,7 @@ test('the dependencies: each checked, the studio\'s own installable, the program
   assert.equal(by('git').state, 'ok');
   assert.deepEqual([by('projects').state, by('projects').install], ['missing', true]);
   assert.equal(by('packages').install, false); // nothing to install into before RAGX is fetched
-  assert.deepEqual([by('ollama').state, by('ollama').install, by('ollama').link], ['missing', false, LINKS.ollama]);
+  assert.deepEqual([by('ollama').state, by('ollama').install, by('ollama').link], ['missing', true, LINKS.ollama]); // its own installer, from the Check (t-1edca66f55)
   assert.equal(by('claude').state, 'ok');
   assert.deepEqual([by('agy').state, by('agy').link], ['missing', LINKS.agy]);
 

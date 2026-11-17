@@ -11,6 +11,7 @@
   "scripts": {
     "setup": "node studio/setup.js",
     "start": "node studio/start.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "bundle": "node studio/bundle.js"
   }
 }

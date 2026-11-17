@@ -4,3 +4,5 @@ node_modules/
 studio.config.json
 # Android platform-tools, downloaded by the setup screen when asked
 tools/
+# The portable bundle, built by npm run bundle
+dist/
