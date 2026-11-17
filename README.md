@@ -1,7 +1,5 @@
 # CanvasX Studio
 
-*Its repository keeps the name NoteX-Studio.*
-
 **NoteX, RAGX and CanvasX together on one PC, started with one command.**
 
 - **CanvasX:** your canvases.
@@ -27,8 +25,8 @@ The agents use **your own** Claude or Google account. Nothing is shared with who
 ## Getting started
 
 ```bash
-git clone --recursive https://github.com/paveenpratheek/NoteX-Studio.git
-cd NoteX-Studio
+git clone --recursive https://github.com/paveenpratheek/CanvasX-Studio.git
+cd CanvasX-Studio
 npm run setup
 npm start
 ```
