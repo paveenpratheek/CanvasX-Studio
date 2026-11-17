@@ -29,6 +29,10 @@ import { fileURLToPath } from 'node:url';
 import { ROOT } from './config.js';
 
 export const NAME = 'CanvasX Studio';
+/* Windows' own tar (bsdtar), which unpacks and writes zip and takes E:\ as a
+ * drive; Git for Windows puts a GNU tar first on PATH that takes "E:" for
+ * a host to connect to. */
+export const TAR = process.platform === 'win32' ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar';
 export const PROJECTS = ['notex', 'ragx', 'canvasx'];
 
 export const nodeZipName = (version) => `node-${version}-win-x64.zip`;
@@ -75,7 +79,7 @@ export function readmeText(version) {
 }
 
 function run(cmd, args, opts = {}) {
-  const shell = process.platform === 'win32' && !path.isAbsolute(cmd) && cmd !== 'git' && cmd !== 'tar';
+  const shell = process.platform === 'win32' && !path.isAbsolute(cmd) && cmd !== 'git';
   const r = shell
     ? spawnSync([cmd, ...args].map((a) => (/[\s"&|<>^()]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a)).join(' '), { ...opts, shell: true, encoding: 'utf8' })
     : spawnSync(cmd, args, { ...opts, encoding: 'utf8' });
@@ -91,16 +95,18 @@ function exportCode(out, cache) {
   const dirty = run('git', ['status', '--porcelain', '--ignore-submodules=none'], { cwd: ROOT }).trim();
   if (dirty) say(`Not committed, so not in the bundle:\n    ${dirty.split('\n').join('\n    ')}`);
   run('git', ['archive', '--format=tar', '-o', tar, 'HEAD'], { cwd: ROOT });
-  run('tar', ['-xf', tar, '-C', out]);
+  run(TAR, ['-xf', tar, '-C', out]);
   for (const p of PROJECTS) {
     const dir = path.join(ROOT, p);
     if (!fs.existsSync(path.join(dir, '.git'))) throw new Error(`${p} is not fetched - run: git submodule update --init --recursive`);
     fs.mkdirSync(path.join(out, p), { recursive: true });
     run('git', ['archive', '--format=tar', '-o', tar, 'HEAD'], { cwd: dir });
-    run('tar', ['-xf', tar, '-C', path.join(out, p)]);
+    run(TAR, ['-xf', tar, '-C', path.join(out, p)]);
     say(`${p} at ${run('git', ['rev-parse', '--short', 'HEAD'], { cwd: dir }).trim()}`);
   }
   fs.rmSync(tar, { force: true });
+  // GitX's commit notes are the projects' record, not anything a user runs.
+  for (const d of ['.', ...PROJECTS]) fs.rmSync(path.join(out, d, '.gitx'), { recursive: true, force: true });
 }
 
 /* The official Node.js for Windows x64, checked against nodejs.org's SHASUMS256.txt. */
@@ -119,7 +125,7 @@ async function fetchNode(version, cache) {
   if (sha(zip) !== want) throw new Error(`${nodeZipName(version)} does not match nodejs.org's SHA-256 - not used.`);
   say(`Node.js ${version}: SHA-256 matches nodejs.org`);
   const unpacked = path.join(cache, `node-${version}-win-x64`);
-  if (!fs.existsSync(path.join(unpacked, 'node.exe'))) run('tar', ['-xf', zip, '-C', cache]);
+  if (!fs.existsSync(path.join(unpacked, 'node.exe'))) run(TAR, ['-xf', zip, '-C', cache]);
   return unpacked;
 }
 
@@ -151,7 +157,7 @@ export async function bundle({ version = process.version, outRoot = path.join(RO
     zipFile = path.join(outRoot, `${NAME}-win-x64.zip`);
     fs.rmSync(zipFile, { force: true });
     say('Zipping…');
-    run('tar', ['-a', '-cf', zipFile, '-C', outRoot, NAME]);
+    run(TAR, ['-a', '-cf', zipFile, '-C', outRoot, NAME]);
   }
   console.log(`Ready: ${out}${zipFile ? `\n       ${zipFile} (${(fs.statSync(zipFile).size / 1e6).toFixed(0)} MB)` : ''}`);
   return { out, zip: zipFile };
