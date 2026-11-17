@@ -430,7 +430,6 @@ body:not(.embed) .bar {
 }
 body:not(.embed) .brand { gap: 10px; padding: 4px 8px; }
 body:not(.embed) .brand img { width: 22px; height: 22px; }
-:root[data-theme="dark"] body:not(.embed) .brand img { filter: invert(1); }
 body:not(.embed) .brand span { font-size: 20px; }
 body:not(.embed) .tabs { flex-direction: column; gap: 2px; }
 body:not(.embed) .tab, body:not(.embed) .engine, body:not(.embed) .right .btn {
