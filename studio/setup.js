@@ -1,4 +1,4 @@
-/* npm run setup: everything NoteX Studio needs on a new PC, checked and,
+/* npm run setup: everything CanvasX Studio needs on a new PC, checked and,
  * where it can be, done - then what is still missing, said plainly.
  *
  *   node studio/setup.js [--no-pull]
@@ -39,7 +39,7 @@ function findAgy() {
 
 async function main() {
   const pull = !process.argv.includes('--no-pull');
-  console.log('NoteX Studio setup\n');
+  console.log('CanvasX Studio setup\n');
 
   const [major] = process.versions.node.split('.').map(Number);
   if (major < 24) { no(`Node.js ${process.version}`, 'install Node.js 24 or newer from nodejs.org, then run setup again'); return finish(); }

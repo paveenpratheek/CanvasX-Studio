@@ -22,7 +22,7 @@ export function isEngineCommand(cmd, cli) {
 }
 
 /* A window title cmd's start and AppleScript both take as it is. */
-export const safeTitle = (t) => String(t || 'NoteX Studio').replace(/[^\w .()-]/g, '').slice(0, 60) || 'NoteX Studio';
+export const safeTitle = (t) => String(t || 'CanvasX Studio').replace(/[^\w .()-]/g, '').slice(0, 60) || 'CanvasX Studio';
 
 /* Windows: a small .cmd file, so the command reaches cmd exactly as the
  * page wrote it, with no second layer of quoting. */

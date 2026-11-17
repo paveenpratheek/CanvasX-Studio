@@ -1,4 +1,4 @@
-/* What NoteX Studio needs on the PC, for the setup screen (t-80c9a58283):
+/* What CanvasX Studio needs on the PC, for the setup screen (t-80c9a58283):
  * each dependency checked, and what the studio owns installed when the user
  * presses Install.
  *
@@ -16,6 +16,7 @@ import { spawn, execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { cliOf, pluginDir } from './config.js';
+import { registerSteps, registered } from './launcher.js';
 
 export const LINKS = Object.freeze({
   git: 'https://git-scm.com/downloads',
@@ -106,17 +107,17 @@ export class Jobs {
 
 /* Every dependency: { id, label, group, state: ok|missing|optional,
  * detail, install?: true (the studio can), link?: its download page }. */
-export async function checkDeps({ root, plugs, nodeVersion = process.version, check = version, fetcher = fetch, agy = findAgy }) {
+export async function checkDeps({ root, plugs, nodeVersion = process.version, check = version, fetcher = fetch, agy = findAgy, platform = process.platform, launcher = registered }) {
   const out = [];
   const add = (d) => { out.push(d); return d; };
   const major = Number(String(nodeVersion).replace(/^v/, '').split('.')[0]);
-  add({ id: 'node', label: 'Node.js', group: 'pc', state: major >= 24 ? 'ok' : 'missing', detail: major >= 24 ? nodeVersion : `${nodeVersion} - NoteX Studio needs 24 or newer`, link: LINKS.node });
+  add({ id: 'node', label: 'Node.js', group: 'pc', state: major >= 24 ? 'ok' : 'missing', detail: major >= 24 ? nodeVersion : `${nodeVersion} - CanvasX Studio needs 24 or newer`, link: LINKS.node });
   const git = await check('git');
   add({ id: 'git', label: 'Git', group: 'pc', state: git ? 'ok' : 'missing', detail: git || 'fetches NoteX, RAGX and CanvasX, and their updates', link: LINKS.git });
 
   const absent = [...Object.values(plugs).map(cliOf), path.join(root, 'canvasx', 'index.html')].filter((f) => !fs.existsSync(f));
   add({ id: 'projects', label: 'NoteX, RAGX and CanvasX', group: 'studio', state: absent.length ? 'missing' : 'ok',
-    detail: absent.length ? (fs.existsSync(path.join(root, '.git')) ? 'not fetched yet' : 'not here - clone NoteX Studio with git clone --recursive') : 'here', install: Boolean(absent.length && git && fs.existsSync(path.join(root, '.git'))) });
+    detail: absent.length ? (fs.existsSync(path.join(root, '.git')) ? 'not fetched yet' : 'not here - clone CanvasX Studio with git clone --recursive') : 'here', install: Boolean(absent.length && git && fs.existsSync(path.join(root, '.git'))) });
   const ragx = plugs.rag.repo;
   const pkgs = fs.existsSync(path.join(ragx, 'node_modules', 'pdfjs-dist'));
   add({ id: 'packages', label: "RAGX's packages", group: 'studio', state: pkgs ? 'ok' : 'missing', detail: pkgs ? 'installed' : 'the PDF reader and the canvas it draws figures on', install: !pkgs && fs.existsSync(path.join(ragx, 'package.json')) });
@@ -126,6 +127,13 @@ export async function checkDeps({ root, plugs, nodeVersion = process.version, ch
   const ollama = await check('ollama');
   const up = ollama ? await ollamaUp(fetcher) : false;
   add({ id: 'ollama', label: 'Ollama', group: 'pc', state: !ollama ? 'missing' : up ? 'ok' : 'missing', detail: !ollama ? 'RAGX embeds your documents with it - without it, search is by keyword only' : up ? `${ollama}, running` : `${ollama}, not running`, link: ollama ? undefined : LINKS.ollama, install: Boolean(ollama && !up), optional: true });
+
+  // CanvasX's Start the server, through a link this user's Windows hands to the studio (t-41a81632a9).
+  if (platform === 'win32') {
+    const on = await launcher({ root });
+    add({ id: 'launcher', label: 'Start from CanvasX', group: 'pc', state: on ? 'ok' : 'missing', optional: true, install: !on,
+      detail: on ? "CanvasX's Start the server opens it" : "lets CanvasX's Start the server start it - a canvasx-studio:// link for your Windows account only" });
+  }
 
   const claude = await check('claude');
   const agyAt = await agy({ check });
@@ -145,6 +153,7 @@ export function installSteps(id, { root, plugs }) {
     }
     case 'pages': return { steps: Object.values(plugs).map((p) => [node, [cliOf(p), 'plugin-setup'], p.repo]) };
     case 'ollama': return { steps: [['ollama', ['serve'], root]], detach: true };
+    case 'launcher': return { steps: registerSteps(root) };
     default: return null;
   }
 }

@@ -1,4 +1,6 @@
-# NoteX Studio
+# CanvasX Studio
+
+*Its repository keeps the name NoteX-Studio.*
 
 **NoteX, RAGX and CanvasX together on one PC, started with one command.**
 
@@ -6,7 +8,7 @@
 - **NoteX:** turns them into places that agents can read and write. It also has an inbox for files and photos, an agent chat on each canvas, and sync with your phone.
 - **RAGX:** embeds your documents and canvases, then answers questions about them with every statement cited.
 
-Each project lives in its own repository. NoteX Studio brings the three together as git submodules and gives them one page to run in. In this page, NoteX and RAGX open as tabs, and CanvasX opens in a tab of its own. CanvasX can also show NoteX and RAGX in its own tab: see [From CanvasX](#from-canvasx).
+Each project lives in its own repository. CanvasX Studio brings the three together as git submodules and gives them one page to run in. In this page, NoteX and RAGX open as tabs, and CanvasX opens in a tab of its own. CanvasX can also show NoteX and RAGX in its own tab: see [From CanvasX](#from-canvasx).
 
 ## What you need
 
@@ -38,7 +40,7 @@ npm start
 
 The studio opens on a setup screen and walks you through:
 
-1. **Check:** what NoteX Studio needs on this PC. What it owns - NoteX, RAGX and CanvasX, RAGX's packages, each page's link to its engine - it installs with **Install**, and it starts Ollama if Ollama is installed but stopped. Node.js, Git, Ollama, Claude Code and Antigravity come from their own sites; each has a **Get** link, and the list updates once you have installed one.
+1. **Check:** what CanvasX Studio needs on this PC. What it owns - NoteX, RAGX and CanvasX, RAGX's packages, each page's link to its engine - it installs with **Install**, and it starts Ollama if Ollama is installed but stopped. Node.js, Git, Ollama, Claude Code and Antigravity come from their own sites; each has a **Get** link, and the list updates once you have installed one. On Windows, **Start from CanvasX** registers a `canvasx-studio://` link for your Windows account only, so CanvasX's **Start the server** can start the studio.
 2. **Agent:** choose **Claude Code** or **Google Antigravity**. Only that one is set up: NoteX's default model and RAGX's agent are set to it. **Sign in…** opens a terminal running it, where you sign in once.
 3. **Start NoteX and RAGX.**
 4. **Folders:** one for your canvases, one for RAGX's and NoteX's files. **Browse…** opens your computer's own folder picker.
@@ -54,14 +56,14 @@ The **Setup** button at the top opens it again at any time.
 
 ### From CanvasX
 
-CanvasX has a switcher at the top left, in the same place on its home screen, on a canvas and over NoteX and RAGX: **CanvasX · NoteX · RAGX**.
+CanvasX's front page has a sidebar: **CanvasX · NoteX · RAGX**, your recent canvases, and at its foot whether CanvasX Studio is running, with **Setup**. On an open canvas the sidebar steps aside and a compact **CanvasX · NoteX · RAGX** switcher stays at the top left.
 
-- When NoteX Studio is running, **NoteX** or **RAGX** opens its page in CanvasX's own tab, with your canvas kept open behind it. The first time, the setup above runs there.
-- When it is not, a dialog offers:
-  - **Setup NoteX and RAGX** - choose a folder; CanvasX writes `NoteX Studio setup.cmd` (or `.sh`) into it. Run it once: it checks Git and Node.js, downloads NoteX Studio and starts it.
-  - **Installed already? Start it** - choose the NoteX Studio folder; CanvasX writes a script there that starts it.
+- When CanvasX Studio is running, **NoteX** or **RAGX** opens its page beside the sidebar, in CanvasX's own tab, with your canvas kept open behind it. The first time, the setup above runs there.
+- When it is not, a note at the bottom right says **The server is not running**, and NoteX and RAGX show as off. **Start the server** starts it where **Start from CanvasX** was set up; otherwise it opens a dialog offering:
+  - **Set it up on this PC** - choose a folder; CanvasX writes `CanvasX Studio setup.cmd` (or `.sh`) into it. Run it once: it checks Git and Node.js, downloads CanvasX Studio and starts it.
+  - **Installed already? Start it** - choose the CanvasX Studio folder; CanvasX writes `Start CanvasX Studio.cmd` there.
 
-  Both show the one command to paste into a terminal instead. The dialog notices when the studio starts and opens it.
+  Under **Rather use a terminal?** are the same as commands to paste. The dialog notices when the studio starts and opens it.
 
 CanvasX finds the studio at `http://127.0.0.1:7075`. The studio answers CanvasX's question - is it here, is its setup done - with no token, and only to CanvasX's own addresses, which are also the only pages allowed to show the studio inside theirs. A CanvasX served from anywhere other than port 9075 is started for with `npm start -- --canvasx-origin http://localhost:5500`; the scripts CanvasX writes pass its own address this way, and it is kept in `studio.config.json`.
 
@@ -73,7 +75,7 @@ CanvasX finds the studio at `http://127.0.0.1:7075`. The studio answers CanvasX'
 
 ## Settings
 
-Everything is kept in **`~/NoteX Studio`**:
+Everything is kept in **`~/CanvasX Studio`** (or `~/NoteX Studio`, on a PC where an earlier version already keeps its data there):
 - `plugins/notex` for NoteX;
 - `plugins/rag` for RAGX's index;
 - `logs` for each engine's log.
@@ -118,6 +120,7 @@ Both servers listen on 127.0.0.1 only. The studio's own API needs the token writ
 | `studio/terminal.js` | `terminal.open`: an engine restart, or a terminal window |
 | `studio/firstrun.js` | the setup screen's work: folder picker, data folder, engine calls, adb and the phone |
 | `studio/deps.js` | what the setup checks and installs, and the two agent platforms |
+| `studio/launch.js`, `studio/launcher.js` | the `canvasx-studio://start` link: registering it, and starting the studio from it |
 | `studio/public/setup.js` | the setup screen |
 | `studio/public/` | the studio page and `plugin-host.js` |
 | `notex/`, `ragx/`, `canvasx/` | the three projects (git submodules) |

@@ -1,4 +1,4 @@
-/* What NoteX Studio runs and where it keeps things (t-33bd14605d).
+/* What CanvasX Studio runs and where it keeps things (t-33bd14605d).
  *
  *   studio.config.json   beside this repository's package.json, optional,
  *                        git-ignored: { dataDir, ports: { studio, ragx,
@@ -18,8 +18,16 @@ import { fileURLToPath } from 'node:url';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CONFIG_FILE = path.join(ROOT, 'studio.config.json');
 
+/* The data folder: ~/CanvasX Studio, or ~/NoteX Studio on a PC that already
+ * keeps its data there from before the rename (t-8fc8ecee06). */
+export function defaultDataDir(home = os.homedir(), exists = fs.existsSync) {
+  const now = path.join(home, 'CanvasX Studio');
+  const before = path.join(home, 'NoteX Studio');
+  return !exists(now) && exists(before) ? before : now;
+}
+
 export const DEFAULTS = Object.freeze({
-  dataDir: path.join(os.homedir(), 'NoteX Studio'),
+  dataDir: defaultDataDir(),
   // RAGX and NoteX keep the ports they have in ter-manager; CanvasX keeps the
   // one NoteX's CanvasX link accepts (t-b2251cde5d).
   // phone: CanvasXP, reached from the phone as localhost:8080 through adb (t-d4739a5f8f).

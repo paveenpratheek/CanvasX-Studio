@@ -35,7 +35,7 @@ export function parseArgs(argv) {
 }
 
 const HELP = `npm start [-- options]
-  --data <folder>        where NoteX and RAGX keep their data (default ~/NoteX Studio)
+  --data <folder>        where NoteX and RAGX keep their data (default ~/CanvasX Studio)
   --no-open              do not open the browser
   --canvasx-origin <url> a CanvasX served elsewhere (e.g. http://localhost:5500) that may
                          find the studio and open NoteX and RAGX in its tab; kept for later runs
@@ -89,7 +89,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { console.log(HELP); return; }
   const [major] = process.versions.node.split('.').map(Number);
-  if (major < 24) throw new Error(`NoteX Studio needs Node.js 24 or newer; this is ${process.version}. Install it from nodejs.org.`);
+  if (major < 24) throw new Error(`CanvasX Studio needs Node.js 24 or newer; this is ${process.version}. Install it from nodejs.org.`);
   const gaps = missing();
 
   const config = loadConfig({ overrides: args });
@@ -118,7 +118,7 @@ async function main() {
   const firstRun = new FirstRun({ config, plugs, engines, log: say });
   const studio = createStudioServer({ config, plugs, engines, firstRun, log: say });
   const canvasx = createStaticServer({ root: path.join(ROOT, 'canvasx'), port: config.ports.canvasx });
-  await listen(studio.server, config.ports.studio, 'NoteX Studio');
+  await listen(studio.server, config.ports.studio, 'CanvasX Studio');
   // The CanvasX the user has open may be the one on this port (t-08d48066f9).
   let canvasxUp = false;
   try { await listen(canvasx.server, config.ports.canvasx, 'CanvasX'); canvasxUp = true; } catch (e) {
@@ -137,7 +137,7 @@ async function main() {
   }
 
   const url = `http://127.0.0.1:${config.ports.studio}/`;
-  console.log(`NoteX Studio at ${url}`);
+  console.log(`CanvasX Studio at ${url}`);
   if (canvasxUp) console.log(`  CanvasX    http://127.0.0.1:${config.ports.canvasx}/`);
   if (phoneUp) console.log(`  CanvasXP   http://127.0.0.1:${config.ports.phone}/ (the phone opens it as localhost:${config.ports.phone})`);
   console.log(`  data       ${config.dataDir}`);

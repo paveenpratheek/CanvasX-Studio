@@ -153,7 +153,7 @@ test('the dependencies: each checked, the studio\'s own installable, the program
   const have = new Set(['git', 'claude']);
   const check = async (cmd) => (have.has(cmd) ? `${cmd} 1.0` : null);
   fs.mkdirSync(path.join(d, '.git'));
-  let list = await checkDeps({ root: d, plugs, nodeVersion: 'v24.1.0', check, fetcher: async () => ({ ok: false }), agy: async () => null });
+  let list = await checkDeps({ root: d, plugs, nodeVersion: 'v24.1.0', check, fetcher: async () => ({ ok: false }), agy: async () => null, platform: 'linux' });
   const by = (id) => list.find((x) => x.id === id);
   assert.equal(by('node').state, 'ok');
   assert.equal(by('git').state, 'ok');
@@ -170,7 +170,10 @@ test('the dependencies: each checked, the studio\'s own installable, the program
   fs.writeFileSync(path.join(d, 'canvasx', 'index.html'), '');
   fs.writeFileSync(path.join(plugs.notex.repo, 'plugin', 'local.json'), JSON.stringify({ repo: plugs.notex.repo }));
   have.add('ollama');
-  list = await checkDeps({ root: d, plugs, nodeVersion: 'v22.0.0', check, fetcher: async () => ({ ok: false }), agy: async () => 'agy' });
+  assert.equal(list.find((x) => x.id === 'launcher'), undefined); // Windows only for now
+  list = await checkDeps({ root: d, plugs, nodeVersion: 'v22.0.0', check, fetcher: async () => ({ ok: false }), agy: async () => 'agy', platform: 'win32', launcher: async () => false });
+  assert.deepEqual([list.find((x) => x.id === 'launcher').state, list.find((x) => x.id === 'launcher').install], ['missing', true]);
+  assert.equal(installSteps('launcher', { root: d, plugs }).steps.length, 3);
   assert.equal(list.find((x) => x.id === 'node').state, 'missing');
   assert.equal(list.find((x) => x.id === 'projects').state, 'ok');
   assert.equal(list.find((x) => x.id === 'packages').install, true);

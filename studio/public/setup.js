@@ -1,5 +1,5 @@
 /* The first-run setup screen (t-2b5970444b), in the user's order:
- *   what NoteX Studio needs on the PC, checked, and what it owns installed;
+ *   what CanvasX Studio needs on the PC, checked, and what it owns installed;
  *   the agent platform - Claude Code or Google Antigravity - chosen and
  *   signed in to; NoteX and RAGX started (t-80c9a58283);
  *   the folder for canvases and the folder for RAGX's and NoteX's files,
@@ -12,7 +12,7 @@
  * (studio/firstrun.js); this page shows the steps and waits on them.
  *
  * It looks like CanvasXP (t-1f89a75b86): CanvasXP's colours, a card with an
- * illustration beside each step, as drawn in the "NoteX Studio Setup" design.
+ * illustration beside each step, as drawn in the "CanvasX Studio Setup" design.
  */
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -165,11 +165,11 @@ export function initSetup({ hostApi, toast, canvasxUrl, onDone, embedded = false
     return a;
   }
 
-  /* What NoteX Studio needs: each line says what it is for; the studio's
+  /* What CanvasX Studio needs: each line says what it is for; the studio's
    * own are installed with Install, the programs linked to their sites. */
   async function deps() {
-    const { run } = screen('deps', 'Welcome to NoteX Studio', 'First, what NoteX Studio needs on this PC. What it owns it installs here; the programs come from their own sites.', {
-      picture: 'check', caption: 'Node.js and Git run NoteX Studio. NoteX, RAGX and CanvasX come with it. Ollama lets RAGX search your documents by meaning.',
+    const { run } = screen('deps', 'Welcome to CanvasX Studio', 'First, what CanvasX Studio needs on this PC. What it owns it installs here; the programs come from their own sites.', {
+      picture: 'check', caption: 'Node.js and Git run CanvasX Studio. NoteX, RAGX and CanvasX come with it. Ollama lets RAGX search your documents by meaning.',
     });
     const item = checklist();
     const rows = new Map();
@@ -201,7 +201,7 @@ export function initSetup({ hostApi, toast, canvasxUrl, onDone, embedded = false
         const needed = NEEDED.includes(d.id);
         it.set(failed || needed ? 'bad' : 'ask', d.label, failed ? job.error : d.detail);
         if (d.install) {
-          const b = el('button', 'sx-btn small', d.id === 'ollama' ? 'Start Ollama' : failed ? 'Try again' : 'Install');
+          const b = el('button', 'sx-btn small', d.id === 'ollama' ? 'Start Ollama' : d.id === 'launcher' ? 'Set it up' : failed ? 'Try again' : 'Install');
           b.type = 'button';
           b.addEventListener('click', async () => {
             b.disabled = true;
@@ -219,8 +219,8 @@ export function initSetup({ hostApi, toast, canvasxUrl, onDone, embedded = false
       msg.className = 'sx-note';
       msg.textContent = busy ? 'Installing - this page follows it.'
         : missing.length ? `Still needed: ${missing.map((d) => d.label).join(', ')}.`
-          : r.deps.some((d) => d.id === 'ollama' && d.state !== 'ok') ? 'Ready to go on. Without Ollama, RAGX searches by keyword only - you can add it later.' : 'Everything NoteX Studio needs is here.';
-      if (say) toast(missing.length ? 'Checked again.' : 'Everything NoteX Studio needs is here.');
+          : r.deps.some((d) => d.id === 'ollama' && d.state !== 'ok') ? 'Ready to go on. Without Ollama, RAGX searches by keyword only - you can add it later.' : 'Everything CanvasX Studio needs is here.';
+      if (say) toast(missing.length ? 'Checked again.' : 'Everything CanvasX Studio needs is here.');
       return { busy };
     }
 
@@ -298,7 +298,7 @@ export function initSetup({ hostApi, toast, canvasxUrl, onDone, embedded = false
   async function startEngines() {
     const st = S.status && S.status.engines;
     if (st && st.length && st.every((e) => e.state === 'running')) { folders(); return; }
-    const { run } = screen('agent', 'Start NoteX and RAGX', 'Everything is set up. NoteX and RAGX run on this PC from now on, whenever NoteX Studio is open.', { picture: 'ready', caption: 'NoteX · RAGX' });
+    const { run } = screen('agent', 'Start NoteX and RAGX', 'Everything is set up. NoteX and RAGX run on this PC from now on, whenever CanvasX Studio is open.', { picture: 'ready', caption: 'NoteX · RAGX' });
     const item = checklist();
     const rag = item('RAGX');
     const notex = item('NoteX');
@@ -530,7 +530,7 @@ export function initSetup({ hostApi, toast, canvasxUrl, onDone, embedded = false
   /* -------------------------------------------------------- finished */
 
   function finished() {
-    screen('setting', 'Finished - NoteX Studio is ready to use', 'Make canvases in CanvasX, ask your files in RAGX, and give a canvas to the agent in NoteX.', { picture: 'finished' });
+    screen('setting', 'Finished - CanvasX Studio is ready to use', 'Make canvases in CanvasX, ask your files in RAGX, and give a canvas to the agent in NoteX.', { picture: 'finished' });
     const badge = el('span', 'sx-badge', '✓ All set on this PC');
     body.querySelector('h1').before(badge);
     const tiles = el('div', 'sx-tiles');
@@ -608,7 +608,7 @@ export function initSetup({ hostApi, toast, canvasxUrl, onDone, embedded = false
   }
 
   function adbMissing(st) {
-    screen('phone', 'One more tool for the phone', "Setting up CanvasXP on the phone needs Android's platform tools (adb) on this PC. They come from Google, about 7 MB, and stay in NoteX Studio's tools folder.", { picture: 'connect', caption: 'Android platform tools' });
+    screen('phone', 'One more tool for the phone', "Setting up CanvasXP on the phone needs Android's platform tools (adb) on this PC. They come from Google, about 7 MB, and stay in CanvasX Studio's tools folder.", { picture: 'connect', caption: 'Android platform tools' });
     const terms = el('p', 'sx-note');
     const a = el('a', null, "Google's terms for the platform tools");
     a.href = st.download.terms;
@@ -782,7 +782,7 @@ export function initSetup({ hostApi, toast, canvasxUrl, onDone, embedded = false
   function ready() {
     screen('ready', 'Ready, Steady… Note', S.phoneResult === 'linked'
       ? 'Your canvases, RAGX and your phone are set up. Whenever the phone is plugged in, press Phone attached - sync in NoteX to bring them together.'
-      : 'Your canvases and RAGX are set up. You can connect a phone later with the Setup button at the top.', { picture: 'ready', centered: true });
+      : 'Your canvases and RAGX are set up. You can connect a phone later from Setup.', { picture: 'ready', centered: true });
     const h = body.querySelector('h1');
     h.replaceChildren('Ready, Steady', el('span', 'sx-dots', '…'), ' ', el('span', 'sx-note-word', 'Note'));
     const row = buttons(['Start', async () => {

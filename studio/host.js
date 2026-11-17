@@ -27,6 +27,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { ROOT, pluginDir, cliOf, dataDirOf, studioOrigins, canvasxOrigins, VERSION } from './config.js';
 import { isEngineCommand, openTerminal } from './terminal.js';
+import { registered } from './launcher.js';
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
@@ -120,7 +121,7 @@ export function studioPage({ token, config, plugs, publicDir }) {
   return html.replace('%%TOKEN%%', attr(token)).replace('%%BOOT%%', attr(JSON.stringify(boot)));
 }
 
-export function createStudioServer({ config, plugs, engines, firstRun = null, token = crypto.randomBytes(24).toString('hex'), publicDir = path.join(ROOT, 'studio', 'public'), terminal = openTerminal, log = () => {} }) {
+export function createStudioServer({ config, plugs, engines, firstRun = null, token = crypto.randomBytes(24).toString('hex'), publicDir = path.join(ROOT, 'studio', 'public'), terminal = openTerminal, log = () => {}, launcher = registered }) {
   const port = config.ports.studio;
   const origins = studioOrigins(config);
   const same = (a, b) => { const x = Buffer.from(String(a || '')), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
@@ -203,6 +204,7 @@ export function createStudioServer({ config, plugs, engines, firstRun = null, to
 
   /* CanvasX asks whether the studio is here. It learns no token and can
    * change nothing; a page elsewhere is not answered at all. */
+  const launcherSeen = { at: 0, on: false };
   async function hello(req, res) {
     const from = req.headers.origin;
     const parents = canvasxOrigins(config);
@@ -215,10 +217,12 @@ export function createStudioServer({ config, plugs, engines, firstRun = null, to
       return res.end();
     }
     if (req.method !== 'GET') return refuse(res, 405, 'Only GET here.');
+    // Whether CanvasX's Start the server can start this studio (t-41a81632a9); asked at most every 30 s.
+    if (Date.now() - launcherSeen.at > 30_000) { launcherSeen.at = Date.now(); launcherSeen.on = await launcher().catch(() => false); }
     let setupDone = Boolean(config.setup && config.setup.done);
     if (!setupDone && firstRun) { try { setupDone = !(await firstRun.status()).needed; } catch (_) { /* not done */ } }
     return json(res, 200, {
-      studio: 'NoteX Studio', version: VERSION, setupDone,
+      studio: 'CanvasX Studio', version: VERSION, setupDone, launcher: launcherSeen.on,
       page: `http://127.0.0.1:${port}/`,
       engines: Object.values(engines).map((e) => ({ id: e.spec.id, label: e.spec.label, state: e.state })),
     });

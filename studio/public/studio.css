@@ -331,8 +331,85 @@ body.in-setup .tabs { visibility: hidden; }
 .sx-choice-state.ok { color: var(--sx-ok-text); }
 .sx-choice-state.bad { color: var(--sx-bad); }
 
-/* Inside CanvasX (t-c614bd5011): CanvasX's switcher stands where the
- * studio's name and tabs were, so the two read as one bar. */
-body.embed .brand, body.embed .tabs, body.embed #canvasx { display: none; }
-body.embed .bar { padding-left: var(--embed-left, 300px); }
-@media (max-width: 720px) { body.embed .bar { padding-left: 12px; padding-top: 52px; height: auto; } }
+/* Inside CanvasX (t-c614bd5011): CanvasX Studio's sidebar shows the
+ * engines' state and Setup, so the studio's own bar steps aside (t-8fc8ecee06). */
+body.embed .bar { display: none; }
+body.embed .setup { inset: 0; }
+
+/* ------------------------------------------------------------------
+ * CanvasX Studio's look, AutomatU's (t-8fc8ecee06): whites and shades of
+ * white, Geist and Source Serif 4, near-black buttons, clay only for what
+ * is picked or waiting. The steps stand in a column beside each screen,
+ * as the design draws them; the illustrations step aside.
+ * ------------------------------------------------------------------ */
+body { font-family: Geist, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+.brand span { font-family: "Source Serif 4", Georgia, serif; font-weight: 500; font-size: 18px; }
+.setup {
+  --sx-ground: #FFFFFF; --sx-card: #FFFFFF; --sx-field: #FAFAFA; --sx-panel: #FAFAFA;
+  --sx-line: #EDEDED; --sx-fg: #1F1E1D; --sx-muted: #5E5D59; --sx-strong: #1F1E1D;
+  --sx-accent: #1F1E1D; --sx-accent-hover: #000000; --sx-accent-text: #1F1E1D; --sx-on-accent: #FFFFFF;
+  --sx-soft: #F2F2F2; --sx-tint: #FAFAFA; --sx-hot: #C6613F; --sx-hot-soft: #FBEFE9;
+  --sx-ok: #3E7A57; --sx-ok-text: #2F5E43; --sx-ok-soft: #EEF6F1;
+  --sx-warn: #C6613F; --sx-bad: #B42318; --sx-btn: #F2F2F2; --sx-btn-hover: #EDEDED;
+  --sx-dot: rgba(31, 30, 29, 0.06); --sx-shadow: 0 24px 64px rgba(31, 30, 29, 0.10);
+  font-family: Geist, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+}
+:root[data-theme="dark"] .setup {
+  --sx-ground: #161616; --sx-card: #1C1C1C; --sx-field: #232323; --sx-panel: #1A1A1A;
+  --sx-line: #2E2E2E; --sx-fg: #EDEDEB; --sx-muted: #ABAAA4; --sx-strong: #FFFFFF;
+  --sx-accent: #EDEDEB; --sx-accent-hover: #FFFFFF; --sx-accent-text: #EDEDEB; --sx-on-accent: #161616;
+  --sx-soft: #262626; --sx-tint: #1F1F1F; --sx-hot: #D9805F; --sx-hot-soft: rgba(198, 97, 63, 0.16);
+  --sx-ok: #5BA67A; --sx-ok-text: #8FD1A9; --sx-ok-soft: rgba(91, 166, 122, 0.16);
+  --sx-warn: #D9805F; --sx-bad: #FF7A6E; --sx-btn: #262626; --sx-btn-hover: #2E2E2E;
+  --sx-dot: rgba(255, 255, 255, 0.05); --sx-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+.sx-card { grid-template-columns: minmax(0, 1fr); min-height: 0; border-radius: 22px; box-shadow: var(--sx-shadow); }
+.sx-art { display: none; }
+.sx-body { display: grid; grid-template-columns: 200px minmax(0, 1fr); column-gap: 40px; align-content: start; padding: 32px 40px 34px; }
+.sx-body > * { grid-column: 2; }
+.sx-body > .sx-rail { grid-column: 1; grid-row: 1 / span 40; align-self: start; flex-direction: column; flex-wrap: nowrap; gap: 2px; margin: 0; padding-right: 20px; border-right: 1px solid var(--sx-line); min-height: 100%; }
+.sx-rail li { width: 100%; box-sizing: border-box; height: 36px; padding: 0 10px; border-radius: 10px; background: transparent; color: var(--sx-muted); font-size: 14px; gap: 10px; }
+.sx-rail li.now { background: var(--sx-btn-hover); color: var(--sx-fg); font-weight: 500; }
+.sx-rail li.done { color: var(--sx-fg); }
+.sx-rail-n { width: 20px; height: 20px; border: 1.5px solid #C9C9C9; background: transparent; box-sizing: border-box; color: var(--sx-muted); }
+.sx-rail li.now .sx-rail-n { background: var(--sx-hot); border-color: var(--sx-hot); color: #fff; }
+.sx-rail li.done .sx-rail-n { background: var(--sx-accent); border-color: var(--sx-accent); color: var(--sx-on-accent); }
+.sx-card.centered .sx-body { display: flex; }
+.sx-card.centered .sx-rail { flex-direction: row; flex-wrap: wrap; justify-content: center; border-right: 0; padding-right: 0; min-height: 0; margin-bottom: 20px; }
+.sx-card.centered .sx-rail li { width: auto; }
+.sx-card.centered .sx-rail li:last-child { background: var(--sx-ok-soft); color: var(--sx-ok-text); }
+.sx-body h1 { font-family: "Source Serif 4", Georgia, serif; font-size: 32px; font-weight: 400; letter-spacing: -0.01em; }
+.sx-lead { color: var(--sx-muted); }
+.sx-btn { min-height: 42px; border-radius: 10px; font-weight: 500; border: 1px solid var(--sx-line); background: var(--sx-card); }
+.sx-btn:hover { transform: none; background: var(--sx-btn); }
+.sx-btn.primary { background: var(--sx-accent); color: var(--sx-on-accent); border-color: transparent; box-shadow: none; }
+.sx-btn.primary:hover { background: var(--sx-accent-hover); }
+.sx-btn.small { min-height: 34px; }
+.sx-checks li, .sx-steps li, .sx-tile { background: var(--sx-card); }
+.sx-checks li.run { border-color: var(--sx-accent); background: var(--sx-card); }
+.sx-checks li.ask { border-color: color-mix(in srgb, var(--sx-hot) 55%, transparent); }
+.sx-checks li.ok .sx-mark { background: var(--sx-ok); border-color: var(--sx-ok); }
+.sx-steps li.on { border-color: var(--sx-hot); background: var(--sx-card); }
+.sx-steps li.on .sx-step-n { background: var(--sx-hot); color: #fff; }
+.sx-step-n { background: var(--sx-btn); color: var(--sx-fg); }
+.sx-choice { border-radius: 16px; background: var(--sx-card); }
+.sx-choice.on { border-color: var(--sx-hot); background: var(--sx-card); box-shadow: 0 0 0 4px var(--sx-hot-soft); }
+.sx-choice.on .sx-choice-mark { border-color: var(--sx-hot); }
+.sx-choice-words strong { font-family: "Source Serif 4", Georgia, serif; font-size: 20px; font-weight: 400; }
+.sx-cta { background: var(--sx-tint); border-color: var(--sx-line); }
+.sx-chip.agent { background: var(--sx-hot-soft); color: var(--sx-hot); }
+.sx-ready { font-family: "Source Serif 4", Georgia, serif; font-weight: 400 !important; letter-spacing: -0.02em !important; }
+.sx-note-word, .sx-dots { color: var(--sx-hot); }
+:root[data-theme="dark"] .sx-note-word { color: var(--sx-hot); }
+.sx-badge { background: var(--sx-ok-soft); color: var(--sx-ok-text); }
+.sx-bar span { background: var(--sx-accent); }
+@media (max-width: 900px) {
+  .sx-body { display: flex; }
+  .sx-body > .sx-rail { flex-direction: row; flex-wrap: wrap; border-right: 0; padding-right: 0; min-height: 0; margin-bottom: 16px; }
+  .sx-rail li { width: auto; }
+}
+/* A screen taller than the window starts at its top, not cut off above it. */
+.setup { align-items: safe center; }
+/* The illustrations, in greys with near-black (t-8fc8ecee06). */
+.setup { --art-surface: #F2F2F2; --art-surface-2: #EDEDED; --art-card: #FFFFFF; --art-card-2: #FAFAFA; --art-card-3: #F5F5F5; --art-ground: #FAFAFA; --art-line: rgba(31, 30, 29, 0.28); --art-strong: #1F1E1D; --art-soft: rgba(31, 30, 29, 0.14); --art-soft-2: rgba(31, 30, 29, 0.07); --art-bezel: #1F1E1D; --art-sync: rgba(31, 30, 29, 0.04); }
+:root[data-theme="dark"] .setup { --art-surface: #262626; --art-surface-2: #2E2E2E; --art-card: #1C1C1C; --art-card-2: #202020; --art-card-3: #232323; --art-ground: #161616; --art-line: rgba(237, 237, 235, 0.32); --art-strong: #EDEDEB; --art-soft: rgba(237, 237, 235, 0.18); --art-soft-2: rgba(237, 237, 235, 0.09); --art-bezel: #0E0E0E; --art-sync: rgba(237, 237, 235, 0.05); }

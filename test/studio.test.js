@@ -1,4 +1,4 @@
-/* NoteX Studio's launcher: its settings, its servers' guards, how a
+/* CanvasX Studio's launcher: its settings, its servers' guards, how a
  * terminal.open is routed, and how it runs an engine (t-33bd14605d,
  * t-f16266d576, t-dc8e2c779e). */
 import { test } from 'node:test';
@@ -8,7 +8,9 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, plugins, dataDirOf, DEFAULTS, cliOf, canvasxOrigins } from '../studio/config.js';
+import { loadConfig, plugins, dataDirOf, DEFAULTS, cliOf, canvasxOrigins, defaultDataDir } from '../studio/config.js';
+import { launch } from '../studio/launch.js';
+import { registerSteps, handlerCommand, KEY } from '../studio/launcher.js';
 import { ManagedEngine, engineSpecs } from '../studio/engines.js';
 import { createStudioServer, createStaticServer, fileIn, listen } from '../studio/host.js';
 import { isEngineCommand, windowsScript, safeTitle } from '../studio/terminal.js';
@@ -56,7 +58,7 @@ test('a terminal.open is the engine only when it runs that plugin\'s own cli.js 
   assert.equal(isEngineCommand('node "C:/Other/engine/cli.js" serve', cli), false);
   assert.equal(isEngineCommand('node "C:/Studio/notex/engine/cli.js" build x', cli), false);
   assert.equal(windowsScript({ cwd: 'C:\\a "b"', cmd: 'ollama pull m', title: 'Ollama & "pull"' }), '@echo off\r\ntitle Ollama  pull\r\ncd /d "C:\\a b"\r\nollama pull m\r\n');
-  assert.equal(safeTitle(''), 'NoteX Studio');
+  assert.equal(safeTitle(''), 'CanvasX Studio');
 });
 
 test('fileIn never leaves its folder nor serves a hidden one', () => {
@@ -97,7 +99,7 @@ test('the studio server: its page with the token, the plugin folders, and its gu
   const opened = [];
   const restarted = [];
   const engines = { notex: { spec: { id: 'notex' }, snapshot: () => ({ id: 'notex', state: 'running' }), logs: () => ['a', 'b'], restart: async () => { restarted.push('notex'); return {}; } } };
-  const s = createStudioServer({ config, plugs, engines, token: 'tok', terminal: async (o) => { opened.push(o); return { opened: true }; } });
+  const s = createStudioServer({ config, plugs, engines, token: 'tok', terminal: async (o) => { opened.push(o); return { opened: true }; }, launcher: async () => true });
   await listen(s.server, port, 'test');
   t.after(() => s.server.close());
   const auth = { 'x-studio-token': 'tok' };
@@ -114,8 +116,9 @@ test('the studio server: its page with the token, the plugin folders, and its gu
   const hi = await request(port, '/api/hello', { headers: { origin: cx } });
   assert.equal(hi.status, 200);
   assert.equal(hi.headers['access-control-allow-origin'], cx);
-  assert.equal(hi.json().studio, 'NoteX Studio');
+  assert.equal(hi.json().studio, 'CanvasX Studio');
   assert.equal(hi.json().setupDone, false);
+  assert.equal(hi.json().launcher, true); // CanvasX's Start the server can start it (t-41a81632a9)
   assert.doesNotMatch(hi.body, /tok/);
   assert.equal((await request(port, '/api/hello', { headers: { origin: 'http://evil.example' } })).status, 403);
   assert.equal((await request(port, '/api/hello')).status, 403);
@@ -240,4 +243,33 @@ test('the engines wait for the setup on a first run, and start by themselves aft
   fs.writeFileSync(path.join(d, 'plugins', 'notex', 'config.json'), JSON.stringify({ workspace: 'E:/canvases' }));
   assert.equal(holdEngines(config, []), false);
   assert.equal(holdEngines({ ...config, setup: { done: 'yes' } }, ['RAGX is not here']), true);
+});
+
+test('the data folder is ~/CanvasX Studio, or ~/NoteX Studio where that already holds the data (t-8fc8ecee06)', () => {
+  const home = path.join('H:', 'me');
+  assert.equal(defaultDataDir(home, () => false), path.join(home, 'CanvasX Studio'));
+  assert.equal(defaultDataDir(home, (p) => p.endsWith('NoteX Studio')), path.join(home, 'NoteX Studio'));
+  assert.equal(defaultDataDir(home, () => true), path.join(home, 'CanvasX Studio'));
+});
+
+test("canvasx-studio://start starts the studio in a terminal, unless it runs; nothing else is taken (t-41a81632a9)", async () => {
+  const config = loadConfig({ file: path.join(os.tmpdir(), 'none.json') });
+  const opened = [];
+  const open = async (o) => { opened.push(o); return { opened: true }; };
+  const down = async () => { throw new Error('refused'); };
+  assert.deepEqual(await launch('canvasx-studio://start', { config, open, probe: down }), { started: true });
+  assert.match(opened[0].cmd, /studio[\\/]start\.js" --no-open$/);
+  assert.equal(opened[0].title, 'CanvasX Studio');
+  assert.deepEqual(await launch('canvasx-studio://start/', { config, open, probe: async () => ({ ok: true }) }), { started: false, why: 'already running' });
+  assert.equal((await launch('canvasx-studio://run?cmd=calc', { config, open, probe: down })).started, false);
+  assert.equal((await launch('', { config, open, probe: down })).started, false);
+  assert.equal(opened.length, 1);
+});
+
+test('the link handler is registered for this Windows user only, pointing at this copy\'s launch.js', () => {
+  const steps = registerSteps('C:\\Studio', 'C:\\node\\node.exe');
+  assert.equal(KEY, 'HKCU\\Software\\Classes\\canvasx-studio');
+  assert.ok(steps.every(([exe, args]) => /reg\.exe$/i.test(exe) && args[0] === 'add' && args[1].startsWith(KEY) && args.includes('/f')));
+  assert.deepEqual(steps[1][1], ['add', KEY, '/v', 'URL Protocol', '/d', '', '/f']);
+  assert.equal(handlerCommand('C:\\Studio', 'C:\\node\\node.exe'), '"C:\\node\\node.exe" "' + path.join('C:\\Studio', 'studio', 'launch.js') + '" "%1"');
 });

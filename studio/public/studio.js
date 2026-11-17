@@ -47,8 +47,9 @@ async function hostApi(method, path, body) {
 /* ter-manager's palette variables, with values of the studio's own; the
  * pages build every colour from these. */
 const PALETTES = {
-  light: { '--pal-bg': '#f2f0ec', '--pal-raise': '#ffffff', '--pal-fg': '#1d1d1f', '--pal-accent': '#3b6cf6', '--on-accent': '#ffffff', '--pal-red': '#c8352c', '--pal-green': '#23905a', '--pal-yellow': '#b98000' },
-  dark: { '--pal-bg': '#121317', '--pal-raise': '#1d1f25', '--pal-fg': '#e9e9ec', '--pal-accent': '#7c9dff', '--on-accent': '#0c0e14', '--pal-red': '#ff6b62', '--pal-green': '#3ecf8e', '--pal-yellow': '#e3b341' },
+  // AutomatU's whites and near-black (t-8fc8ecee06); clay is the one warm colour.
+  light: { '--pal-bg': '#FAFAFA', '--pal-raise': '#FFFFFF', '--pal-fg': '#1F1E1D', '--pal-accent': '#1F1E1D', '--on-accent': '#FFFFFF', '--pal-red': '#B42318', '--pal-green': '#3E7A57', '--pal-yellow': '#C6613F' },
+  dark: { '--pal-bg': '#161616', '--pal-raise': '#1C1C1C', '--pal-fg': '#EDEDEB', '--pal-accent': '#EDEDEB', '--on-accent': '#161616', '--pal-red': '#FF7A6E', '--pal-green': '#5BA67A', '--pal-yellow': '#D9805F' },
 };
 const dark = window.matchMedia('(prefers-color-scheme: dark)');
 // Inside CanvasX, CanvasX's own light or dark mode, not the system's.
@@ -57,7 +58,7 @@ let forcedMode = EMBED ? themeWord(new URLSearchParams(location.search).get('the
 
 function theme() {
   const mode = forcedMode || (dark.matches ? 'dark' : 'light');
-  return { vars: { ...PALETTES[mode], '--mono': 'ui-monospace, "Cascadia Mono", Consolas, monospace' }, attrs: { 'data-theme': mode === 'dark' ? 'dark' : null, 'data-scene': null, 'data-surface': null } };
+  return { vars: { ...PALETTES[mode], '--mono': '"Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace' }, attrs: { 'data-theme': mode === 'dark' ? 'dark' : null, 'data-scene': null, 'data-surface': null } };
 }
 
 function applyTheme() {
@@ -87,7 +88,7 @@ function storageKey(pid, key) {
 
 async function answer(pid, method, params) {
   switch (method) {
-    case 'host.info': return { hostApi: '1', pluginId: pid, hosted: true, theme: theme(), host: 'NoteX Studio' };
+    case 'host.info': return { hostApi: '1', pluginId: pid, hosted: true, theme: theme(), host: 'CanvasX Studio' };
     case 'terminal.open': {
       const r = await hostApi('POST', 'terminal', { plugin: pid, cwd: params.cwd || '', cmd: params.cmd || '', title: params.title || '' });
       if (r.engine) { toast(`Restarting the ${labelOf(pid)} engine…`); setTimeout(pollEngines, 300); }
@@ -132,7 +133,7 @@ function show(id) {
   try { localStorage.setItem('notexstudio.tab', id); } catch (_) {}
   for (const [pid, f] of frames) f.hidden = pid !== id;
   for (const b of $('tabs').children) { const on = b.dataset.id === id; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); }
-  document.title = `${labelOf(id)} · NoteX Studio`;
+  document.title = `${labelOf(id)} · CanvasX Studio`;
 }
 
 function build() {
