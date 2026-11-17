@@ -54,7 +54,7 @@ The **Setup** button at the top opens it again at any time.
 
 ### From CanvasX
 
-CanvasX has a switcher at the top of its home screen, and at the bottom left of a canvas: **CanvasX · NoteX · RAGX**.
+CanvasX has a switcher at the top left, in the same place on its home screen, on a canvas and over NoteX and RAGX: **CanvasX · NoteX · RAGX**.
 
 - When NoteX Studio is running, **NoteX** or **RAGX** opens its page in CanvasX's own tab, with your canvas kept open behind it. The first time, the setup above runs there.
 - When it is not, a dialog offers:
