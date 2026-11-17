@@ -10,6 +10,10 @@
  *   /api/host/...          what the page asks of the PC: status, logs, a
  *                          data folder, a terminal, an engine restarted -
  *                          only with the token, from the studio's own origin
+ *   /api/hello             who answers here and whether its setup is done,
+ *                          with no token, only to CanvasX's pages, which
+ *                          may also show the studio page in a frame
+ *                          (t-c614bd5011)
  *
  * The CanvasX server serves the CanvasX folder as `python -m http.server`
  * would, on the port NoteX's CanvasX link accepts (t-b2251cde5d).
@@ -21,7 +25,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { ROOT, pluginDir, cliOf, dataDirOf, studioOrigins } from './config.js';
+import { ROOT, pluginDir, cliOf, dataDirOf, studioOrigins, canvasxOrigins, VERSION } from './config.js';
 import { isEngineCommand, openTerminal } from './terminal.js';
 
 const TYPES = {
@@ -109,6 +113,8 @@ export function studioPage({ token, config, plugs, publicDir }) {
   const boot = {
     plugins: Object.values(plugs).map((p) => ({ id: p.id, label: p.label, hint: p.hint })),
     canvasx: `http://127.0.0.1:${config.ports.canvasx}/`,
+    // The CanvasX pages that may frame this one and tell it which view to show.
+    parents: canvasxOrigins(config),
   };
   const attr = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   return html.replace('%%TOKEN%%', attr(token)).replace('%%BOOT%%', attr(JSON.stringify(boot)));
@@ -173,6 +179,11 @@ export function createStudioServer({ config, plugs, engines, firstRun = null, to
       if (post && route === 'setup/pick') { const b = await body(); return json(res, 200, await firstRun.pickFolder({ title: b.title, initial: b.initial })); }
       if (post && route === 'setup/folders') { const b = await body(); return json(res, 200, await firstRun.applyFolders({ canvas: b.canvas, data: b.data })); }
       if (post && route === 'setup/relay') { const b = await body(); return json(res, 200, await firstRun.relay(String(b.id || ''), String(b.method || 'GET').toUpperCase(), String(b.path || ''), b.body)); }
+      if (get && route === 'setup/deps') return json(res, 200, await firstRun.deps());
+      if (post && route === 'setup/deps/install') { const b = await body(); return json(res, 200, await firstRun.install(String(b.id || ''))); }
+      if (post && route === 'setup/agent') { const b = await body(); return json(res, 200, await firstRun.chooseAgent(String(b.platform || ''))); }
+      if (post && route === 'setup/agent/signin') { const b = await body(); return json(res, 200, await firstRun.signIn(b.platform ? String(b.platform) : null)); }
+      if (post && route === 'setup/engines/start') return json(res, 200, await firstRun.startEngines());
       if (post && route === 'setup/done') { const b = await body(); return json(res, 200, { setup: firstRun.finish({ phone: b.phone || null }) }); }
       if (get && route === 'setup/phone') return json(res, 200, await firstRun.phoneStatus());
       if (post && route === 'setup/phone/adb') return json(res, 200, await firstRun.downloadAdb());
@@ -190,17 +201,42 @@ export function createStudioServer({ config, plugs, engines, firstRun = null, to
     }
   }
 
+  /* CanvasX asks whether the studio is here. It learns no token and can
+   * change nothing; a page elsewhere is not answered at all. */
+  async function hello(req, res) {
+    const from = req.headers.origin;
+    const parents = canvasxOrigins(config);
+    if (!from || !parents.includes(from)) return refuse(res, 403, 'Only CanvasX asks this.');
+    res.setHeader('access-control-allow-origin', from);
+    res.setHeader('vary', 'Origin');
+    if (req.method === 'OPTIONS') {
+      // A CanvasX served from a public address asks first, under Private Network Access.
+      res.writeHead(204, { 'access-control-allow-methods': 'GET', 'access-control-max-age': '600', ...(req.headers['access-control-request-private-network'] ? { 'access-control-allow-private-network': 'true' } : {}) });
+      return res.end();
+    }
+    if (req.method !== 'GET') return refuse(res, 405, 'Only GET here.');
+    let setupDone = Boolean(config.setup && config.setup.done);
+    if (!setupDone && firstRun) { try { setupDone = !(await firstRun.status()).needed; } catch (_) { /* not done */ } }
+    return json(res, 200, {
+      studio: 'NoteX Studio', version: VERSION, setupDone,
+      page: `http://127.0.0.1:${port}/`,
+      engines: Object.values(engines).map((e) => ({ id: e.spec.id, label: e.spec.label, state: e.state })),
+    });
+  }
+
   const server = http.createServer(async (req, res) => {
     secure(res);
     if (!guardHost(req, res, port)) return;
     const url = new URL(req.url, `http://127.0.0.1:${port}`);
     try {
+      if (url.pathname === '/api/hello') return await hello(req, res);
       if (url.pathname.startsWith('/api/host/')) return await api(req, res, url);
       if (req.method !== 'GET' && req.method !== 'HEAD') return refuse(res, 405, 'Only GET here.');
       const head = req.method === 'HEAD';
       if (url.pathname === '/' || url.pathname === '/index.html') {
         const html = studioPage({ token, config, plugs, publicDir });
-        res.writeHead(200, { 'content-type': TYPES['.html'], 'cache-control': 'no-store', 'content-security-policy': "frame-ancestors 'none'" });
+        // Framed only by CanvasX's pages (t-c614bd5011), never by another site.
+        res.writeHead(200, { 'content-type': TYPES['.html'], 'cache-control': 'no-store', 'content-security-policy': `frame-ancestors 'self' ${canvasxOrigins(config).join(' ')}`, 'cross-origin-resource-policy': 'cross-origin' });
         return res.end(head ? undefined : html);
       }
       if (url.pathname === '/plugin-host.js') return sendFile(res, path.join(publicDir, 'plugin-host.js'), { head }) || refuse(res, 404, 'Not found.');

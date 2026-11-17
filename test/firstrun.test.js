@@ -10,6 +10,7 @@ import path from 'node:path';
 import { loadConfig, plugins, saveConfigFile } from '../studio/config.js';
 import { createStudioServer, listen } from '../studio/host.js';
 import { FirstRun, parseDevices, parseFound, relayAllowed, pickFolder, adbCandidates, SetupError } from '../studio/firstrun.js';
+import { checkDeps, installSteps, Jobs, LINKS, PLATFORMS } from '../studio/deps.js';
 
 const tmp = (t) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-first-')); t.after(() => fs.rmSync(d, { recursive: true, force: true })); return d; };
 
@@ -143,4 +144,93 @@ test('a file deleted while it is being served never takes the server down (t-514
   assert.ok(status === 404 || status === 'cut', `answered ${status}`);
   fs.writeFileSync(f, '{"ok":true}');
   assert.equal((await fetch('http://127.0.0.1:7396/runtime.json')).status, 200, 'the server still answers');
+});
+
+/* The setup's dependencies and agent platform (t-80c9a58283, t-621a165092). */
+test('the dependencies: each checked, the studio\'s own installable, the programs linked', async (t) => {
+  const d = tmp(t);
+  const plugs = plugins(d);
+  const have = new Set(['git', 'claude']);
+  const check = async (cmd) => (have.has(cmd) ? `${cmd} 1.0` : null);
+  fs.mkdirSync(path.join(d, '.git'));
+  let list = await checkDeps({ root: d, plugs, nodeVersion: 'v24.1.0', check, fetcher: async () => ({ ok: false }), agy: async () => null });
+  const by = (id) => list.find((x) => x.id === id);
+  assert.equal(by('node').state, 'ok');
+  assert.equal(by('git').state, 'ok');
+  assert.deepEqual([by('projects').state, by('projects').install], ['missing', true]);
+  assert.equal(by('packages').install, false); // nothing to install into before RAGX is fetched
+  assert.deepEqual([by('ollama').state, by('ollama').install, by('ollama').link], ['missing', false, LINKS.ollama]);
+  assert.equal(by('claude').state, 'ok');
+  assert.deepEqual([by('agy').state, by('agy').link], ['missing', LINKS.agy]);
+
+  // RAGX and NoteX here: the packages and the pages can be installed; Ollama installed but stopped can be started.
+  for (const p of Object.values(plugs)) { fs.mkdirSync(path.join(p.repo, 'engine'), { recursive: true }); fs.writeFileSync(path.join(p.repo, 'engine', 'cli.js'), ''); fs.mkdirSync(path.join(p.repo, 'plugin'), { recursive: true }); }
+  fs.writeFileSync(path.join(plugs.rag.repo, 'package.json'), '{}');
+  fs.mkdirSync(path.join(d, 'canvasx'));
+  fs.writeFileSync(path.join(d, 'canvasx', 'index.html'), '');
+  fs.writeFileSync(path.join(plugs.notex.repo, 'plugin', 'local.json'), JSON.stringify({ repo: plugs.notex.repo }));
+  have.add('ollama');
+  list = await checkDeps({ root: d, plugs, nodeVersion: 'v22.0.0', check, fetcher: async () => ({ ok: false }), agy: async () => 'agy' });
+  assert.equal(list.find((x) => x.id === 'node').state, 'missing');
+  assert.equal(list.find((x) => x.id === 'projects').state, 'ok');
+  assert.equal(list.find((x) => x.id === 'packages').install, true);
+  assert.match(list.find((x) => x.id === 'pages').detail, /^RAGX not told/);
+  assert.deepEqual([list.find((x) => x.id === 'ollama').detail, list.find((x) => x.id === 'ollama').install], ['ollama 1.0, not running', true]);
+  assert.equal(list.find((x) => x.id === 'agy').state, 'ok');
+
+  assert.deepEqual(installSteps('projects', { root: d, plugs }).steps, [['git', ['submodule', 'update', '--init', '--recursive'], d]]);
+  assert.equal(installSteps('packages', { root: d, plugs }).steps[0][1][0], 'install');
+  assert.equal(installSteps('ollama', { root: d, plugs }).detach, true);
+  assert.equal(installSteps('git', { root: d, plugs }), null);
+});
+
+test('an install job runs its steps in turn, keeps their output, and says how it ended', async () => {
+  const { EventEmitter } = await import('node:events');
+  const ran = [];
+  const fake = (code, out) => (cmd, args) => {
+    ran.push([cmd, args]);
+    const c = new EventEmitter();
+    c.stdout = new EventEmitter();
+    c.stderr = new EventEmitter();
+    setImmediate(() => { c.stdout.emit('data', out); c.emit('close', code); });
+    return c;
+  };
+  const jobs = new Jobs({ run: fake(0, 'added 12 packages\n') });
+  jobs.start('pages', [[process.execPath, ['a'], '.'], [process.execPath, ['b'], '.']]);
+  assert.equal(jobs.busy('pages'), true);
+  assert.equal(jobs.start('pages', []).state, 'running'); // not started twice
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(jobs.get('pages').state, 'done');
+  assert.equal(ran.length, 2);
+  assert.ok(jobs.get('pages').lines.includes('added 12 packages'));
+  const bad = new Jobs({ run: fake(1, 'npm ERR! nope') });
+  bad.start('packages', [[process.execPath, ['x'], '.']]);
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(bad.get('packages').state, 'failed');
+  assert.match(bad.get('packages').error, /code 1/);
+});
+
+test('the agent platform is written into NoteX\'s config, keeping what it holds, and RAGX told once it runs', async (t) => {
+  const d = tmp(t);
+  const config = loadConfig({ file: path.join(d, 'studio.config.json'), overrides: { dataDir: d, canvasxOrigins: ['http://localhost:5500'] } });
+  const notexCfg = path.join(d, 'plugins', 'notex', 'config.json');
+  fs.mkdirSync(path.dirname(notexCfg), { recursive: true });
+  fs.writeFileSync(notexCfg, JSON.stringify({ workspace: 'E:/c', arranger: { other: 1 } }));
+  const eng = (id, label) => ({ state: 'stopped', spec: { id, label }, snapshot() { return { id, state: this.state }; } });
+  const engines = { rag: eng('rag', 'RAGX'), notex: eng('notex', 'NoteX') };
+  const fr = new FirstRun({ config, plugs: plugins(d), engines, adb: { path: () => null } });
+  await assert.rejects(fr.chooseAgent('openai'), /claude or gemini/);
+  const r = await fr.chooseAgent('gemini');
+  assert.deepEqual(r, { agent: 'gemini', notexModel: PLATFORMS.gemini.notexModel, ragx: 'later' });
+  const c = JSON.parse(fs.readFileSync(notexCfg, 'utf8'));
+  assert.equal(c.workspace, 'E:/c');
+  assert.deepEqual(c.arranger, { other: 1, model: 'gemini-3.8-flash-medium' });
+  assert.deepEqual(c.canvasxOrigins, ['http://localhost:9075', 'http://127.0.0.1:9075', 'http://localhost:5500']);
+  assert.equal(JSON.parse(fs.readFileSync(config.file, 'utf8')).setup.agent, 'gemini');
+  // Held engines: the setup is needed, and known at once.
+  const st = await fr.status();
+  assert.deepEqual([st.held, st.needed, st.known], [true, true, true]);
+  await assert.rejects(fr.install('git'), /not something the setup installs/);
+  engines.rag.state = 'running';
+  await assert.rejects(fr.install('packages'), /Stop NoteX and RAGX first/);
 });

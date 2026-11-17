@@ -51,6 +51,14 @@ function port(v, name) {
   return n;
 }
 
+/* An origin a CanvasX page may be served from: http(s)://host[:port], no path. */
+export function origin(v) {
+  let u;
+  try { u = new URL(String(v)); } catch (_) { throw new Error(`${JSON.stringify(v)} is not an address like http://localhost:9075.`); }
+  if (!/^https?:$/.test(u.protocol) || u.username || u.password) throw new Error(`${v} is not an http or https address.`);
+  return u.origin;
+}
+
 /* The file, then what the command line says. */
 export function loadConfig({ file = CONFIG_FILE, overrides = {} } = {}) {
   const fromFile = readConfigFile(file);
@@ -64,7 +72,9 @@ export function loadConfig({ file = CONFIG_FILE, overrides = {} } = {}) {
   const dataDir = path.resolve(overrides.dataDir || fromFile.dataDir || DEFAULTS.dataDir);
   const open = overrides.open ?? fromFile.open ?? DEFAULTS.open;
   const setup = fromFile.setup && typeof fromFile.setup === 'object' ? fromFile.setup : {};
-  return { dataDir, ports, open: Boolean(open), file, setup };
+  // Other addresses CanvasX is served from, beside the studio's own (t-08d48066f9).
+  const extra = [...(Array.isArray(fromFile.canvasxOrigins) ? fromFile.canvasxOrigins : []), ...(overrides.canvasxOrigins || [])].map(origin);
+  return { dataDir, ports, open: Boolean(open), file, setup, canvasxOrigins: [...new Set(extra)] };
 }
 
 /* Some settings written into the file, keeping whatever else it holds. */
@@ -82,3 +92,15 @@ export function dataDirOf(config, id) {
 
 /* The studio page's own origins: the only pages the engines take requests from. */
 export const studioOrigins = (config) => [`http://127.0.0.1:${config.ports.studio}`, `http://localhost:${config.ports.studio}`];
+
+/* NoteX's own CanvasX addresses, which its CanvasX link accepts with no setting. */
+export const NOTEX_CANVASX_ORIGINS = Object.freeze(['http://localhost:9075', 'http://127.0.0.1:9075']);
+
+/* The CanvasX pages that may find the studio and show its page in theirs
+ * (t-c614bd5011): the CanvasX the studio serves, and any other address the
+ * user started it for. */
+export const canvasxOrigins = (config) => [...new Set([
+  `http://127.0.0.1:${config.ports.canvasx}`, `http://localhost:${config.ports.canvasx}`, ...(config.canvasxOrigins || []),
+])];
+
+export const VERSION = (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version; } catch (_) { return '0'; } })();

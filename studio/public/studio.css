@@ -310,3 +310,29 @@ body.in-setup .tabs { visibility: hidden; }
   .sx-field-row { flex-wrap: wrap; }
   .sx-btn.push { margin-left: 0; }
 }
+
+/* The setup's dependency lines and agent choice (t-80c9a58283). */
+.sx-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.sx-inline:empty { display: none; }
+.sx-choices { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+.sx-choice {
+  display: flex; gap: 14px; align-items: flex-start; text-align: left; width: 100%;
+  padding: 16px 18px; border-radius: 16px; border: 1.5px solid var(--sx-line);
+  background: color-mix(in srgb, var(--sx-fg) 3%, transparent); color: var(--sx-fg); cursor: pointer;
+}
+.sx-choice:hover { border-color: color-mix(in srgb, var(--sx-accent) 45%, transparent); }
+.sx-choice.on { border-color: var(--sx-accent); background: var(--sx-tint); }
+.sx-choice:focus-visible { outline: 2px solid var(--sx-accent); outline-offset: 2px; }
+.sx-choice-mark { flex: none; width: 20px; height: 20px; margin-top: 2px; border-radius: 50%; border: 2px solid var(--sx-line); }
+.sx-choice.on .sx-choice-mark { border: 6px solid var(--sx-accent); }
+.sx-choice-words { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sx-choice-words strong { font-size: 15px; color: var(--sx-strong); }
+.sx-choice-words > span { font-size: 13px; color: var(--sx-muted); }
+.sx-choice-state.ok { color: var(--sx-ok-text); }
+.sx-choice-state.bad { color: var(--sx-bad); }
+
+/* Inside CanvasX (t-c614bd5011): CanvasX's switcher stands where the
+ * studio's name and tabs were, so the two read as one bar. */
+body.embed .brand, body.embed .tabs, body.embed #canvasx { display: none; }
+body.embed .bar { padding-left: var(--embed-left, 300px); }
+@media (max-width: 720px) { body.embed .bar { padding-left: 12px; padding-top: 52px; height: auto; } }

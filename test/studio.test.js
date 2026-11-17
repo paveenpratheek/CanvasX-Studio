@@ -8,11 +8,11 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, plugins, dataDirOf, DEFAULTS, cliOf } from '../studio/config.js';
+import { loadConfig, plugins, dataDirOf, DEFAULTS, cliOf, canvasxOrigins } from '../studio/config.js';
 import { ManagedEngine, engineSpecs } from '../studio/engines.js';
 import { createStudioServer, createStaticServer, fileIn, listen } from '../studio/host.js';
 import { isEngineCommand, windowsScript, safeTitle } from '../studio/terminal.js';
-import { parseArgs } from '../studio/start.js';
+import { parseArgs, holdEngines } from '../studio/start.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const tmp = (t) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-test-')); t.after(() => fs.rmSync(d, { recursive: true, force: true })); return d; };
@@ -106,7 +106,24 @@ test('the studio server: its page with the token, the plugin folders, and its gu
   assert.equal(page.status, 200);
   assert.match(page.body, /<meta name="studio-token" content="tok">/);
   assert.match(page.body, /&quot;id&quot;:&quot;notex&quot;/);
-  assert.equal(page.headers['content-security-policy'], "frame-ancestors 'none'");
+  // Framed only by the studio itself and CanvasX's pages (t-c614bd5011).
+  assert.equal(page.headers['content-security-policy'], `frame-ancestors 'self' http://127.0.0.1:${port + 3} http://localhost:${port + 3}`);
+
+  // CanvasX asks whether the studio is here: answered to CanvasX only, and with no token.
+  const cx = `http://localhost:${port + 3}`;
+  const hi = await request(port, '/api/hello', { headers: { origin: cx } });
+  assert.equal(hi.status, 200);
+  assert.equal(hi.headers['access-control-allow-origin'], cx);
+  assert.equal(hi.json().studio, 'NoteX Studio');
+  assert.equal(hi.json().setupDone, false);
+  assert.doesNotMatch(hi.body, /tok/);
+  assert.equal((await request(port, '/api/hello', { headers: { origin: 'http://evil.example' } })).status, 403);
+  assert.equal((await request(port, '/api/hello')).status, 403);
+  const pre = await request(port, '/api/hello', { method: 'OPTIONS', headers: { origin: cx, 'access-control-request-private-network': 'true' } });
+  assert.equal(pre.status, 204);
+  assert.equal(pre.headers['access-control-allow-private-network'], 'true');
+  // CanvasX's origin gets no further than hello.
+  assert.equal((await request(port, '/api/host/status', { headers: { ...auth, origin: cx } })).status, 403);
   assert.equal((await request(port, '/plugins/notex/plugin.html')).body, '<p>notex</p>');
   assert.equal((await request(port, '/plugins/rag/')).body, '<p>ragx</p>');
   assert.equal((await request(port, '/plugins/rag/runtime.json')).headers['cache-control'], 'no-store');
@@ -201,4 +218,26 @@ test('the command line', () => {
   assert.deepEqual(parseArgs(['--no-open', '--data', 'D:/x', '--notex-port', '7900']), { ports: { notex: '7900' }, open: false, dataDir: 'D:/x' });
   assert.throws(() => parseArgs(['--data']), /needs a value/);
   assert.throws(() => parseArgs(['--what']), /Unknown option/);
+  assert.deepEqual(parseArgs(['--canvasx-origin', 'http://localhost:5500', '--canvasx-origin', 'https://x.example']).canvasxOrigins, ['http://localhost:5500', 'https://x.example']);
+});
+
+test('a CanvasX served elsewhere is kept as its origin, and a bad one refused (t-08d48066f9)', (t) => {
+  const d = tmp(t);
+  const file = path.join(d, 'studio.config.json');
+  const c = loadConfig({ file, overrides: { canvasxOrigins: ['http://localhost:5500/index.html'] } });
+  assert.deepEqual(c.canvasxOrigins, ['http://localhost:5500']);
+  assert.deepEqual(canvasxOrigins(c), ['http://127.0.0.1:9075', 'http://localhost:9075', 'http://localhost:5500']);
+  assert.throws(() => loadConfig({ file, overrides: { canvasxOrigins: ['file:///C:/x'] } }), /not an http/);
+  assert.throws(() => loadConfig({ file, overrides: { canvasxOrigins: ['nope'] } }), /not an address/);
+});
+
+test('the engines wait for the setup on a first run, and start by themselves after it', (t) => {
+  const d = tmp(t);
+  const config = loadConfig({ file: path.join(d, 'c.json'), overrides: { dataDir: d } });
+  assert.equal(holdEngines(config, []), true);
+  assert.equal(holdEngines(config, ['RAGX is not here']), true);
+  fs.mkdirSync(path.join(d, 'plugins', 'notex'), { recursive: true });
+  fs.writeFileSync(path.join(d, 'plugins', 'notex', 'config.json'), JSON.stringify({ workspace: 'E:/canvases' }));
+  assert.equal(holdEngines(config, []), false);
+  assert.equal(holdEngines({ ...config, setup: { done: 'yes' } }, ['RAGX is not here']), true);
 });

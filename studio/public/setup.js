@@ -1,4 +1,7 @@
 /* The first-run setup screen (t-2b5970444b), in the user's order:
+ *   what NoteX Studio needs on the PC, checked, and what it owns installed;
+ *   the agent platform - Claude Code or Google Antigravity - chosen and
+ *   signed in to; NoteX and RAGX started (t-80c9a58283);
  *   the folder for canvases and the folder for RAGX's and NoteX's files,
  *   the embedding model downloading, setting up, finished;
  *   then the phone, if there is one: connect it by USB and press OK,
@@ -18,7 +21,9 @@ const sameModel = (a, b) => (a.includes(':') ? a : `${a}:latest`) === (b.include
 const fmtBytes = (n) => (!n ? '' : n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`);
 const baseName = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || p;
 
-const STAGES = [['folders', 'Folders'], ['setting', 'Set up'], ['phone', 'Phone'], ['ready', 'Ready']];
+const STAGES = [['deps', 'Check'], ['agent', 'Agent'], ['folders', 'Folders'], ['setting', 'Set up'], ['phone', 'Phone'], ['ready', 'Ready']];
+// What must be there before the engines can start; Ollama and Git are wanted, not needed.
+const NEEDED = ['node', 'projects', 'packages', 'pages'];
 
 /* ------------------------------------------------------------ the art */
 
@@ -61,7 +66,7 @@ function icon(name) {
   return s;
 }
 
-export function initSetup({ hostApi, toast, canvasxUrl, onDone }) {
+export function initSetup({ hostApi, toast, canvasxUrl, onDone, embedded = false, toCanvasx = null }) {
   const S = { step: null, status: null, canvas: '', data: '', serial: null, phone: null, run: 0, pickBusy: false };
   const relay = (id, method, path, body) => hostApi('POST', 'setup/relay', { id, method, path, body });
   const card = $('setup-card');
@@ -149,6 +154,180 @@ export function initSetup({ hostApi, toast, canvasxUrl, onDone }) {
     };
   }
 
+  /* ------------------------------------------------------------ deps */
+
+  const depsOf = () => hostApi('GET', 'setup/deps');
+  function linkBtn(href, text) {
+    const a = el('a', 'sx-btn small', `${text} ↗`);
+    a.href = href;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    return a;
+  }
+
+  /* What NoteX Studio needs: each line says what it is for; the studio's
+   * own are installed with Install, the programs linked to their sites. */
+  async function deps() {
+    const { run } = screen('deps', 'Welcome to NoteX Studio', 'First, what NoteX Studio needs on this PC. What it owns it installs here; the programs come from their own sites.', {
+      picture: 'check', caption: 'Node.js and Git run NoteX Studio. NoteX, RAGX and CanvasX come with it. Ollama lets RAGX search your documents by meaning.',
+    });
+    const item = checklist();
+    const rows = new Map();
+    const msg = note('');
+    const row = buttons(['Continue', () => agent(), 'primary'], ['Check again', () => paint(true)]);
+    const go = row.querySelector('.primary');
+    go.disabled = true;
+    const asked = new Set(); // installs pressed here, whose failures are shown
+
+    async function paint(say = false) {
+      let r;
+      try { r = await depsOf(); } catch (e) { if (alive(run)) { msg.className = 'sx-note bad'; msg.textContent = e.message; } return null; }
+      if (!alive(run)) return null;
+      S.deps = r.deps;
+      if (r.agent) S.agent = r.agent;
+      for (const d of r.deps.filter((x) => x.group !== 'agent')) {
+        if (!rows.has(d.id)) { const it = item(d.label); const extra = el('div', 'sx-inline'); it.body.append(extra); rows.set(d.id, { it, extra }); }
+        const { it, extra } = rows.get(d.id);
+        extra.replaceChildren();
+        const job = r.jobs[d.id];
+        if (job && job.state === 'running') {
+          it.set('run', d.label, job.lines.length ? job.lines[job.lines.length - 1] : 'Installing…');
+          it.bar(null);
+          continue;
+        }
+        it.bar(false);
+        if (d.state === 'ok') { it.set('ok', d.label, d.detail); continue; }
+        const failed = Boolean(job && job.state === 'failed' && asked.has(d.id));
+        const needed = NEEDED.includes(d.id);
+        it.set(failed || needed ? 'bad' : 'ask', d.label, failed ? job.error : d.detail);
+        if (d.install) {
+          const b = el('button', 'sx-btn small', d.id === 'ollama' ? 'Start Ollama' : failed ? 'Try again' : 'Install');
+          b.type = 'button';
+          b.addEventListener('click', async () => {
+            b.disabled = true;
+            asked.add(d.id);
+            try { await hostApi('POST', 'setup/deps/install', { id: d.id }); } catch (e) { toast(e.message, true); }
+            paint();
+          });
+          extra.append(b);
+        }
+        if (d.link) extra.append(linkBtn(d.link, d.id === 'node' ? 'Get Node.js 24' : `Get ${d.label}`));
+      }
+      const missing = r.deps.filter((d) => NEEDED.includes(d.id) && d.state !== 'ok');
+      const busy = Object.values(r.jobs).some((j) => j && j.state === 'running');
+      go.disabled = missing.length > 0 || busy;
+      msg.className = 'sx-note';
+      msg.textContent = busy ? 'Installing - this page follows it.'
+        : missing.length ? `Still needed: ${missing.map((d) => d.label).join(', ')}.`
+          : r.deps.some((d) => d.id === 'ollama' && d.state !== 'ok') ? 'Ready to go on. Without Ollama, RAGX searches by keyword only - you can add it later.' : 'Everything NoteX Studio needs is here.';
+      if (say) toast(missing.length ? 'Checked again.' : 'Everything NoteX Studio needs is here.');
+      return { busy };
+    }
+
+    // Follow running installs; a program installed from its site shows up by itself, or with Check again.
+    while (alive(run)) {
+      const st = await paint();
+      await wait(st && st.busy ? 1200 : 5000);
+    }
+  }
+
+  /* ----------------------------------------------------------- agent */
+
+  const PLAT = [
+    { id: 'claude', dep: 'claude', label: 'Claude Code', sub: "Anthropic's Claude: Sonnet, Opus and Haiku", how: 'sign in with your Claude account' },
+    { id: 'gemini', dep: 'agy', label: 'Google Antigravity', sub: "Google's Gemini models, through Antigravity's agy", how: 'sign in with your Google account' },
+  ];
+
+  /* Which platform the agents run on: only that one is set up (t-621a165092). */
+  async function agent() {
+    const { run } = screen('agent', 'Which agent will you use?', 'NoteX writes on your canvases with it, and RAGX answers your questions with it. Choose one - you can change it later in NoteX and RAGX.', {
+      picture: 'finished', caption: 'The agent runs on this PC, signed in to your own account.',
+    });
+    const box = el('div', 'sx-choices');
+    body.append(box);
+    const msg = note('');
+    const row = buttons(['Continue', () => startEngines(), 'primary'], ['Sign in…', async () => {
+      try { await hostApi('POST', 'setup/agent/signin', { platform: S.agent }); msg.className = 'sx-note'; msg.textContent = 'A terminal opened: sign in there, then come back and press Continue.'; } catch (e) { msg.className = 'sx-note bad'; msg.textContent = e.message; }
+    }], ['Back', () => deps()]);
+    const [go, signin] = row.querySelectorAll('button');
+    signin.title = 'Opens a terminal running the agent, where you sign in once';
+    if (!S.deps) { try { S.deps = (await depsOf()).deps; } catch (_) { S.deps = []; } }
+    if (!alive(run)) return;
+    const installed = (p) => (S.deps.find((x) => x.id === p.dep) || {}).state === 'ok';
+
+    const paint = () => {
+      box.replaceChildren();
+      const chosen = PLAT.find((p) => p.id === S.agent);
+      go.disabled = !chosen || !installed(chosen);
+      signin.disabled = go.disabled;
+      for (const p of PLAT) {
+        const on = S.agent === p.id;
+        const card = el('button', `sx-choice${on ? ' on' : ''}`);
+        card.type = 'button';
+        card.setAttribute('aria-pressed', String(on));
+        const words = el('span', 'sx-choice-words');
+        words.append(el('strong', null, p.label), el('span', null, p.sub),
+          el('span', `sx-choice-state ${installed(p) ? 'ok' : 'bad'}`, installed(p) ? `Installed - ${p.how} the first time` : 'Not installed on this PC yet'));
+        card.append(el('span', 'sx-choice-mark'), words);
+        card.addEventListener('click', async () => {
+          try {
+            await hostApi('POST', 'setup/agent', { platform: p.id });
+            S.agent = p.id;
+            msg.className = 'sx-note';
+            msg.textContent = installed(p) ? `${p.label} it is. If you have not signed in to it on this PC, press Sign in.` : '';
+            paint();
+          } catch (e) { msg.className = 'sx-note bad'; msg.textContent = e.message; }
+        });
+        box.append(card);
+        if (on && !installed(p)) {
+          const get = el('div', 'sx-inline');
+          const again = el('button', 'sx-btn small', 'Check again');
+          again.type = 'button';
+          again.addEventListener('click', async () => { try { S.deps = (await depsOf()).deps; } catch (_) {} if (alive(run)) paint(); });
+          get.append(el('span', 'sx-aside', `Install ${p.label}, sign in once, then check again.`), linkBtn(PLAT_LINK[p.id], `Get ${p.label}`), again);
+          box.append(get);
+        }
+      }
+    };
+    const PLAT_LINK = Object.fromEntries(PLAT.map((p) => [p.id, (S.deps.find((x) => x.id === p.dep) || {}).link || '#']));
+    paint();
+  }
+
+  /* ---------------------------------------------------------- engines */
+
+  async function startEngines() {
+    const st = S.status && S.status.engines;
+    if (st && st.length && st.every((e) => e.state === 'running')) { folders(); return; }
+    const { run } = screen('agent', 'Start NoteX and RAGX', 'Everything is set up. NoteX and RAGX run on this PC from now on, whenever NoteX Studio is open.', { picture: 'ready', caption: 'NoteX · RAGX' });
+    const item = checklist();
+    const rag = item('RAGX');
+    const notex = item('NoteX');
+    rag.set('wait', 'RAGX', 'Searches your documents and answers from them.');
+    notex.set('wait', 'NoteX', 'Reads your canvases and writes on them with the agent.');
+    const msg = note('');
+    const row = buttons(['Start NoteX and RAGX', async () => {
+      row.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+      rag.set('run', 'RAGX', 'Starting…');
+      notex.set('run', 'NoteX', 'Starting…');
+      try {
+        const r = await hostApi('POST', 'setup/engines/start');
+        if (!alive(run)) return;
+        S.status = { ...S.status, engines: r.engines };
+        rag.set('ok', 'RAGX running');
+        notex.set('ok', 'NoteX running');
+        await wait(700);
+        if (alive(run)) folders();
+      } catch (e) {
+        if (!alive(run)) return;
+        rag.set('bad', 'RAGX');
+        notex.set('bad', 'NoteX');
+        msg.className = 'sx-note bad';
+        msg.textContent = `${e.message} Their logs open from the engine names in the top bar.`;
+        row.querySelectorAll('button').forEach((b) => { b.disabled = false; });
+      }
+    }, 'primary'], ['Back', () => agent()]);
+  }
+
   /* --------------------------------------------------------- folders */
 
   function folderField(label, hint, value, title, kind) {
@@ -185,7 +364,7 @@ export function initSetup({ hostApi, toast, canvasxUrl, onDone }) {
   }
 
   function folders() {
-    screen('folders', 'Welcome to NoteX Studio', 'Two folders to start with. Press Browse to choose one, or type its path.', {
+    screen('folders', 'Your folders', 'Two folders to start with. Press Browse to choose one, or type its path.', {
       picture: 'folders', caption: 'Your canvases stay in a folder you choose. NoteX and RAGX keep their work in another.',
     });
     const sep = S.status.home.includes('\\') ? '\\' : '/';
@@ -240,12 +419,17 @@ export function initSetup({ hostApi, toast, canvasxUrl, onDone }) {
     if (!alive(run)) return;
     link.set('ok', 'NoteX and RAGX linked', 'NoteX reads the canvas folder; RAGX reads what NoteX writes.');
     cx.set('ask', 'CanvasX on this PC', 'Open it and choose the same canvas folder once - your browser asks you to allow it.');
-    const open = el('a', 'sx-btn small', 'Open CanvasX ↗');
-    open.href = canvasxUrl;
-    open.target = '_blank';
-    open.rel = 'noopener';
-    open.addEventListener('click', () => cx.set('ok', 'CanvasX opened', `Choose ${S.status.workspace} there, if you have not yet.`));
-    cx.li.append(open);
+    if (embedded) {
+      // Inside CanvasX already: the folder is chosen there, behind this page.
+      cx.set('ask', 'CanvasX in this tab', `Choose ${S.status.workspace} with Open Target Workspace once this setup is done.`);
+    } else {
+      const open = el('a', 'sx-btn small', 'Open CanvasX ↗');
+      open.href = canvasxUrl;
+      open.target = '_blank';
+      open.rel = 'noopener';
+      open.addEventListener('click', () => cx.set('ok', 'CanvasX opened', `Choose ${S.status.workspace} there, if you have not yet.`));
+      cx.li.append(open);
+    }
 
     // 2. The embedding model, downloaded unless Ollama has it already.
     const ok = await model(m, run, showRing);
@@ -602,15 +786,27 @@ export function initSetup({ hostApi, toast, canvasxUrl, onDone }) {
     const h = body.querySelector('h1');
     h.replaceChildren('Ready, Steady', el('span', 'sx-dots', '…'), ' ', el('span', 'sx-note-word', 'Note'));
     const row = buttons(['Start', async () => {
-      try { await hostApi('POST', 'setup/done', { phone: S.phoneResult || null }); } catch (e) { toast(e.message, true); }
+      try { await hostApi('POST', 'setup/done', { phone: S.phoneResult || null }); S.status.needed = false; } catch (e) { toast(e.message, true); }
       show(false);
       onDone();
     }, 'primary big']);
-    const cx = el('a', 'sx-btn big', 'Open CanvasX ↗');
-    cx.href = canvasxUrl;
-    cx.target = '_blank';
-    cx.rel = 'noopener';
-    row.append(cx);
+    if (embedded && toCanvasx) {
+      const cx = el('button', 'sx-btn big', 'Back to CanvasX');
+      cx.type = 'button';
+      cx.addEventListener('click', async () => {
+        try { await hostApi('POST', 'setup/done', { phone: S.phoneResult || null }); S.status.needed = false; } catch (_) {}
+        show(false);
+        onDone();
+        toCanvasx();
+      });
+      row.append(cx);
+    } else {
+      const cx = el('a', 'sx-btn big', 'Open CanvasX ↗');
+      cx.href = canvasxUrl;
+      cx.target = '_blank';
+      cx.rel = 'noopener';
+      row.append(cx);
+    }
   }
 
   /* ------------------------------------------------------------ open */
@@ -624,12 +820,13 @@ export function initSetup({ hostApi, toast, canvasxUrl, onDone }) {
     if (!S.status) return;
     if (!force && !S.status.needed) return;
     show(true);
-    // A setup begun before a reload goes on from its folders.
+    S.agent = S.agent || S.status.setup.agent || null;
+    // A setup begun before a reload goes on from its folders; else it starts with what the PC has.
     if (!force && S.status.workspace && S.status.setup.started) setting({ apply: false });
-    else folders();
+    else deps();
   }
 
   $('setup-btn').addEventListener('click', () => open({ force: true }));
   $('setup-close').addEventListener('click', () => { S.run++; show(false); });
-  return { open };
+  return { open, shown: () => !$('setup').hidden, needed: () => Boolean(S.status && S.status.needed), close: () => { S.run++; show(false); } };
 }

@@ -10,6 +10,14 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 
 const TOKEN = document.querySelector('meta[name="studio-token"]').content;
 const BOOT = JSON.parse(document.querySelector('meta[name="studio-boot"]').content);
+/* Inside CanvasX's tab (t-c614bd5011): CanvasX's switcher picks the view,
+ * and only CanvasX's own pages are listened to or told anything. */
+const EMBED = new URLSearchParams(location.search).get('embed') === '1' && window.parent !== window;
+const PARENTS = Array.isArray(BOOT.parents) ? BOOT.parents : [];
+function toParent(msg) {
+  if (!EMBED) return;
+  for (const o of PARENTS) { try { window.parent.postMessage({ notexStudio: 1, ...msg }, o); } catch (_) { /* not that origin */ } }
+}
 const STORE_PREFIX = 'notexstudio.plugin.';
 const VALUE_MAX = 256 * 1024;
 
@@ -43,9 +51,12 @@ const PALETTES = {
   dark: { '--pal-bg': '#121317', '--pal-raise': '#1d1f25', '--pal-fg': '#e9e9ec', '--pal-accent': '#7c9dff', '--on-accent': '#0c0e14', '--pal-red': '#ff6b62', '--pal-green': '#3ecf8e', '--pal-yellow': '#e3b341' },
 };
 const dark = window.matchMedia('(prefers-color-scheme: dark)');
+// Inside CanvasX, CanvasX's own light or dark mode, not the system's.
+const themeWord = (v) => (v === 'light' || v === 'dark' ? v : null);
+let forcedMode = EMBED ? themeWord(new URLSearchParams(location.search).get('theme')) : null;
 
 function theme() {
-  const mode = dark.matches ? 'dark' : 'light';
+  const mode = forcedMode || (dark.matches ? 'dark' : 'light');
   return { vars: { ...PALETTES[mode], '--mono': 'ui-monospace, "Cascadia Mono", Consolas, monospace' }, attrs: { 'data-theme': mode === 'dark' ? 'dark' : null, 'data-scene': null, 'data-surface': null } };
 }
 
@@ -146,6 +157,8 @@ function build() {
   $('canvasx').href = BOOT.canvasx;
   let first = BOOT.plugins[0].id;
   try { const saved = localStorage.getItem('notexstudio.tab'); if (frames.has(saved)) first = saved; } catch (_) {}
+  const asked = new URLSearchParams(location.search).get('view');
+  if (frames.has(asked)) first = asked;
   show(first);
 }
 
@@ -241,5 +254,26 @@ setInterval(pollEngines, 3000);
 
 /* First run: no canvas folder yet, so the setup screen comes first (t-2b5970444b).
  * When it ends, the pages load again with their folders set. */
-const setup = initSetup({ hostApi, toast, canvasxUrl: BOOT.canvasx, onDone: () => { for (const f of frames.values()) f.src = f.src; } });
-setup.open();
+const setup = initSetup({
+  hostApi, toast, canvasxUrl: BOOT.canvasx, embedded: EMBED,
+  onDone: () => { for (const f of frames.values()) f.src = f.src; toParent({ event: 'setup-done' }); },
+  toCanvasx: () => toParent({ event: 'show', view: 'canvasx' }),
+});
+
+if (EMBED) {
+  document.body.classList.add('embed');
+  window.addEventListener('message', (e) => {
+    if (e.source !== window.parent || !PARENTS.includes(e.origin)) return;
+    const m = e.data;
+    if (!m || m.notexStudio !== 1) return;
+    if (themeWord(m.theme)) { forcedMode = m.theme; applyTheme(); }
+    if (m.show === 'setup') setup.open({ force: true });
+    else if (frames.has(m.show)) {
+      // A setup still needed stays in front; one opened again from Setup gives way.
+      if (setup.shown() && !setup.needed()) setup.close();
+      show(m.show);
+    }
+  });
+}
+setup.open({ force: EMBED && new URLSearchParams(location.search).get('view') === 'setup' });
+toParent({ event: 'ready' });

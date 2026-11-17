@@ -16,8 +16,10 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { ROOT, DEFAULTS, saveConfigFile } from './config.js';
+import { ROOT, DEFAULTS, saveConfigFile, canvasxOrigins, NOTEX_CANVASX_ORIGINS } from './config.js';
 import { engineSpecs } from './engines.js';
+import { checkDeps, installSteps, Jobs, PLATFORMS, findAgy, writeNotexConfig } from './deps.js';
+import { openTerminal } from './terminal.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -186,8 +188,9 @@ export const RELAY = {
 export const relayAllowed = (id, method, p) => Boolean(RELAY[id] && RELAY[id].some(([m, re]) => m === method && re.test(p)));
 
 export class FirstRun {
-  constructor({ config, plugs, engines, adb = new Adb(), pick = pickFolder, xpPort = null, log = () => {} }) {
-    Object.assign(this, { config, plugs, engines, adb, pick, log });
+  constructor({ config, plugs, engines, adb = new Adb(), pick = pickFolder, xpPort = null, log = () => {}, root = ROOT, check = checkDeps, jobs = null, terminal = openTerminal }) {
+    Object.assign(this, { config, plugs, engines, adb, pick, log, root, check, terminal });
+    this.jobs = jobs || new Jobs({ log });
     this.xpPort = xpPort ?? config.ports.phone;
     this.picking = null;
     this.applying = null;
@@ -234,16 +237,81 @@ export class FirstRun {
   }
 
   /* Whether this is a first run: no canvas folder in NoteX, or a setup
-   * begun and not finished. */
+   * begun and not finished. On a first run the engines wait for the
+   * setup's Start (t-80c9a58283): held, and the answer is known at once. */
   async status() {
     const s = this.setupState();
+    const held = Object.values(this.engines).length > 0 && Object.values(this.engines).every((e) => e.state === 'stopped');
     let workspace;
-    try { workspace = (await this.call('notex', 'GET', '/api/state')).workspace || null; } catch (_) { workspace = undefined; }
+    if (held) workspace = null;
+    else { try { workspace = (await this.call('notex', 'GET', '/api/state')).workspace || null; } catch (_) { workspace = undefined; } }
     return {
-      needed: workspace === null || Boolean(s.started && !s.done), known: workspace !== undefined,
+      needed: workspace === null || Boolean(s.started && !s.done) || (held && !s.done), known: workspace !== undefined, held,
       workspace: workspace ?? null, dataDir: this.config.dataDir, defaultDataDir: DEFAULTS.dataDir, home: os.homedir(),
       setup: s, xpPort: this.xpPort, engines: Object.values(this.engines).map((e) => e.snapshot()),
+      platforms: Object.values(PLATFORMS).map(({ id, label, link }) => ({ id, label, link })),
     };
+  }
+
+  /* ---------------------------------------------- dependencies, agent */
+
+  async deps() {
+    const list = await this.check({ root: this.root, plugs: this.plugs });
+    return { deps: list, jobs: this.jobs.all(), agent: this.setupState().agent || null };
+  }
+
+  /* Install one dependency the studio owns; the page polls deps() for it. */
+  async install(id) {
+    const plan = installSteps(id, { root: this.root, plugs: this.plugs });
+    if (!plan) throw new SetupError(400, `${id} is not something the setup installs - its page has the link.`);
+    if (['projects', 'packages', 'pages'].includes(id) && Object.values(this.engines).some((e) => ['running', 'starting'].includes(e.state))) {
+      throw new SetupError(409, 'Stop NoteX and RAGX first - their files are in use while they run.');
+    }
+    this.log(`Setup: installing ${id}`);
+    return { job: this.jobs.start(id, plan.steps, { detach: plan.detach }) };
+  }
+
+  /* The agent platform the user chose: NoteX's default model is written
+   * into its config.json now, RAGX's agent set once it runs (t-621a165092). */
+  async chooseAgent(platform) {
+    const p = PLATFORMS[platform];
+    if (!p) throw new SetupError(400, `platform is ${Object.keys(PLATFORMS).join(' or ')}.`);
+    this.mark({ agent: p.id });
+    this.prepareNotex();
+    let ragx = 'later';
+    if (this.engines.rag && this.engines.rag.state === 'running') {
+      try { await this.call('rag', 'PUT', '/api/settings', { agent: p.ragxAgent }); ragx = 'set'; } catch (e) { ragx = e.message; }
+    }
+    return { agent: p.id, notexModel: p.notexModel, ragx };
+  }
+
+  /* NoteX's config.json in the data folder, before NoteX starts there. */
+  prepareNotex() {
+    const p = PLATFORMS[this.setupState().agent];
+    return writeNotexConfig(path.join(this.config.dataDir, 'plugins', 'notex', 'config.json'), {
+      model: p ? p.notexModel : null,
+      origins: (this.config.canvasxOrigins || []).length ? [...NOTEX_CANVASX_ORIGINS, ...canvasxOrigins(this.config)] : null,
+    });
+  }
+
+  /* A terminal window running the platform's CLI, where the user signs in. */
+  async signIn(platform) {
+    const p = PLATFORMS[platform || this.setupState().agent];
+    if (!p) throw new SetupError(400, 'Choose Claude Code or Google Antigravity first.');
+    let cmd = p.signin;
+    if (p.id === 'gemini') { const at = await findAgy(); if (!at) throw new SetupError(404, `${p.label} is not installed - get it from ${p.link}.`); cmd = at === 'agy' ? 'agy' : `"${at}"`; }
+    return this.terminal({ cwd: os.homedir(), cmd, title: `Sign in to ${p.label}` });
+  }
+
+  /* Start NoteX and RAGX, the CanvasX pages and the agent's model told
+   * them first, and RAGX's agent set once it answers. */
+  async startEngines() {
+    const p = PLATFORMS[this.setupState().agent];
+    this.prepareNotex();
+    for (const id of ['rag', 'notex']) if (this.engines[id] && ['stopped', 'failed'].includes(this.engines[id].state)) this.engines[id].start();
+    await this.running();
+    if (p) await this.call('rag', 'PUT', '/api/settings', { agent: p.ragxAgent }).catch((e) => this.log(`Setup: RAGX's agent not set: ${e.message}`));
+    return { engines: Object.values(this.engines).map((e) => e.snapshot()) };
   }
 
   async pickFolder(opts) {
@@ -276,7 +344,12 @@ export class FirstRun {
         saveConfigFile(this.config.file, { dataDir: dd });
         const specs = engineSpecs(this.config, this.plugs);
         await Promise.all(Object.values(this.engines).map((e) => e.stop()));
+        this.prepareNotex();
         for (const [id, e] of Object.entries(this.engines)) { e.spec = specs[id]; e.start(); }
+      } else if (Object.values(this.engines).some((e) => e.state === 'stopped')) {
+        // Held for a first run and not started yet: start them now.
+        this.prepareNotex();
+        for (const e of Object.values(this.engines)) if (e.state === 'stopped') e.start();
       }
       await this.running();
       const r = await fetch(`${this.engines.notex.runtime().url}/api/workspace`, {
