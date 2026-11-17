@@ -136,6 +136,20 @@ function show(id) {
   document.title = `${labelOf(id)} · CanvasX Studio`;
 }
 
+/* The tabs' icons, the same as in CanvasX's sidebar (t-8fc8ecee06): fixed markup, never built from data. */
+const TAB_ICONS = {
+  notex: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+  rag: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
+};
+function tabIcon(id) {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  s.setAttribute('viewBox', '0 0 24 24');
+  s.setAttribute('aria-hidden', 'true');
+  s.setAttribute('class', 'tab-icon');
+  s.innerHTML = TAB_ICONS[id] || '';
+  return s;
+}
+
 function build() {
   for (const p of BOOT.plugins) {
     const b = el('button', 'tab');
@@ -143,7 +157,7 @@ function build() {
     b.setAttribute('role', 'tab');
     b.dataset.id = p.id;
     b.title = p.hint;
-    b.append(el('span', 'dot'), el('span', null, p.label));
+    b.append(tabIcon(p.id), el('span', 'dot'), el('span', null, p.label));
     b.addEventListener('click', () => show(p.id));
     $('tabs').append(b);
     const f = document.createElement('iframe');

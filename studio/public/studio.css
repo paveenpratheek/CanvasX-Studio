@@ -413,3 +413,46 @@ body { font-family: Geist, "Segoe UI Variable Text", "Segoe UI", system-ui, sans
 /* The illustrations, in greys with near-black (t-8fc8ecee06). */
 .setup { --art-surface: #F2F2F2; --art-surface-2: #EDEDED; --art-card: #FFFFFF; --art-card-2: #FAFAFA; --art-card-3: #F5F5F5; --art-ground: #FAFAFA; --art-line: rgba(31, 30, 29, 0.28); --art-strong: #1F1E1D; --art-soft: rgba(31, 30, 29, 0.14); --art-soft-2: rgba(31, 30, 29, 0.07); --art-bezel: #1F1E1D; --art-sync: rgba(31, 30, 29, 0.04); }
 :root[data-theme="dark"] .setup { --art-surface: #262626; --art-surface-2: #2E2E2E; --art-card: #1C1C1C; --art-card-2: #202020; --art-card-3: #232323; --art-ground: #161616; --art-line: rgba(237, 237, 235, 0.32); --art-strong: #EDEDEB; --art-soft: rgba(237, 237, 235, 0.18); --art-soft-2: rgba(237, 237, 235, 0.09); --art-bezel: #0E0E0E; --art-sync: rgba(237, 237, 235, 0.05); }
+
+/* ------------------------------------------------------------------
+ * Opened on its own (127.0.0.1:7075), the studio page is CanvasX
+ * Studio's shell too (t-8fc8ecee06): the same sidebar as CanvasX's -
+ * the outlined square and the name, NoteX and RAGX, the engines and
+ * Setup at the foot, and Open CanvasX - beside the page. Inside
+ * CanvasX the bar is not drawn at all (body.embed, above).
+ * ------------------------------------------------------------------ */
+body:not(.embed) { flex-direction: row; }
+body:not(.embed) .bar {
+  --side-bg: color-mix(in srgb, var(--fg) 2%, var(--raise));
+  width: 248px; height: auto; flex: none; box-sizing: border-box;
+  flex-direction: column; align-items: stretch; gap: 20px; padding: 16px 12px;
+  background: var(--side-bg); border-bottom: 0; border-right: 1px solid var(--line); overflow-y: auto;
+}
+body:not(.embed) .brand { gap: 10px; padding: 4px 8px; }
+body:not(.embed) .brand img { width: 22px; height: 22px; }
+:root[data-theme="dark"] body:not(.embed) .brand img { filter: invert(1); }
+body:not(.embed) .brand span { font-size: 20px; }
+body:not(.embed) .tabs { flex-direction: column; gap: 2px; }
+body:not(.embed) .tab, body:not(.embed) .engine, body:not(.embed) .right .btn {
+  width: 100%; box-sizing: border-box; justify-content: flex-start; height: 36px; padding: 0 10px;
+  border: 0; border-radius: 10px; background: transparent; font-size: 14px;
+}
+body:not(.embed) .tab { color: color-mix(in srgb, var(--fg) 80%, transparent); }
+body:not(.embed) .tab:hover, body:not(.embed) .engine:hover, body:not(.embed) .right .btn:hover { background: var(--soft); }
+body:not(.embed) .tab.on { background: color-mix(in srgb, var(--fg) 8%, var(--raise)); color: var(--fg); font-weight: 500; }
+body:not(.embed) .tab .dot { display: none; }
+body:not(.embed) .right { margin-left: 0; margin-top: auto; flex-direction: column; align-items: stretch; gap: 2px; padding-top: 12px; border-top: 1px solid var(--line); }
+body:not(.embed) .engines { flex-direction: column; gap: 2px; }
+body:not(.embed) .engine { font-size: 13px; color: color-mix(in srgb, var(--fg) 70%, transparent); }
+body:not(.embed) main { flex: 1; min-width: 0; }
+body:not(.embed) .setup { inset: 0 0 0 248px; }
+body:not(.embed) .setup-close { top: 14px; right: 16px; }
+@media (max-width: 760px) {
+  body:not(.embed) { flex-direction: column; }
+  body:not(.embed) .bar { width: auto; flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line); }
+  body:not(.embed) .tabs { flex-direction: row; }
+  body:not(.embed) .right { margin-top: 0; border-top: 0; padding-top: 0; flex-direction: row; flex-wrap: wrap; }
+  body:not(.embed) .tab, body:not(.embed) .engine, body:not(.embed) .right .btn { width: auto; }
+  body:not(.embed) .setup { inset: 0; }
+}
+.tab-icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
