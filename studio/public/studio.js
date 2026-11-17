@@ -58,7 +58,7 @@ let forcedMode = EMBED ? themeWord(new URLSearchParams(location.search).get('the
 
 function theme() {
   const mode = forcedMode || (dark.matches ? 'dark' : 'light');
-  return { vars: { ...PALETTES[mode], '--mono': '"Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace' }, attrs: { 'data-theme': mode === 'dark' ? 'dark' : null, 'data-scene': null, 'data-surface': null } };
+  return { vars: { ...PALETTES[mode], '--mono': '"Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace' }, attrs: { 'data-theme': mode === 'dark' ? 'dark' : null, 'data-scene': null, 'data-surface': null, 'data-host': 'canvasx-studio' } };
 }
 
 function applyTheme() {

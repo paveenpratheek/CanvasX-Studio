@@ -18,6 +18,17 @@
   const ORIGIN = global.location.origin;
   const HOSTED = !!(global.parent && global.parent !== global);
 
+  /* CanvasX Studio's fonts, for the look the pages take when the studio
+   * marks them data-host="canvasx-studio" (t-8fc8ecee06); ter-manager has a
+   * plugin-host.js of its own, so nothing here reaches it. */
+  if (HOSTED && global.document && !global.document.querySelector('link[data-studio-fonts]')) {
+    const f = global.document.createElement('link');
+    f.rel = 'stylesheet';
+    f.href = 'https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500&display=swap';
+    f.setAttribute('data-studio-fonts', '');
+    (global.document.head || global.document.documentElement).appendChild(f);
+  }
+
   let seq = 0;
   const pending = new Map();
   const listeners = [];
