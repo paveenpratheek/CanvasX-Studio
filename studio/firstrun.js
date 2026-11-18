@@ -16,7 +16,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { ROOT, DEFAULTS, saveConfigFile, canvasxOrigins, NOTEX_CANVASX_ORIGINS } from './config.js';
+import { ROOT, DEFAULTS, saveConfigFile, canvasxOrigins, NOTEX_CANVASX_ORIGINS, dataDirOf } from './config.js';
 import { engineSpecs } from './engines.js';
 import { checkDeps, installSteps, Jobs, PLATFORMS, findAgy, writeNotexConfig, freshPath } from './deps.js';
 import { openTerminal } from './terminal.js';
@@ -292,8 +292,10 @@ export class FirstRun {
     // A program installed while the studio runs is found by the engines too (t-1edca66f55).
     freshPath();
     const p = PLATFORMS[this.setupState().agent];
-    return writeNotexConfig(path.join(this.config.dataDir, 'plugins', 'notex', 'config.json'), {
-      model: p ? p.notexModel : null,
+    // A NoteX shared with ter-manager keeps the model it was given there (t-5cb2f89c68).
+    const shared = Boolean(this.config.engineData && this.config.engineData.notex);
+    return writeNotexConfig(path.join(dataDirOf(this.config, 'notex').dir, 'config.json'), {
+      model: p ? p.notexModel : null, keepModel: shared,
       origins: (this.config.canvasxOrigins || []).length ? [...NOTEX_CANVASX_ORIGINS, ...canvasxOrigins(this.config)] : null,
     });
   }

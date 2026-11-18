@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ROOT, loadConfig, plugins, cliOf, pluginDir, saveConfigFile, dataDirOf } from './config.js';
+import { ROOT, loadConfig, plugins, cliOf, pluginDir, saveConfigFile, dataDirOf, studioOrigins } from './config.js';
 import { ManagedEngine, engineSpecs } from './engines.js';
 import { createStudioServer, createStaticServer, listen } from './host.js';
 import { FirstRun } from './firstrun.js';
@@ -55,8 +55,8 @@ export function holdEngines(config, gaps) {
   return gaps.length > 0 || (!(config.setup && config.setup.done) && !hasWorkspace(config));
 }
 
-export function missing(root = ROOT) {
-  const plugs = plugins(root);
+export function missing(root = ROOT, projects = root === ROOT ? loadConfig().projects : {}) {
+  const plugs = plugins(root, projects);
   const out = [];
   for (const p of Object.values(plugs)) if (!fs.existsSync(cliOf(p))) out.push(`${p.label} is not here (${path.relative(root, p.repo)} is empty) - run: npm run setup`);
   if (!fs.existsSync(path.join(root, 'canvasx', 'index.html'))) out.push('CanvasX is not here (canvasx is empty) - run: npm run setup');
@@ -97,7 +97,7 @@ async function main() {
   const config = loadConfig({ overrides: args });
   if (args.canvasxOrigins) saveConfigFile(config.file, { canvasxOrigins: config.canvasxOrigins });
   const hold = holdEngines(config, gaps);
-  const plugs = plugins();
+  const plugs = plugins(ROOT, config.projects);
   for (const p of Object.values(plugs)) if (fs.existsSync(cliOf(p))) pluginSetup(p);
   // Logs follow the data folder, which the setup may move (t-c3a090b64a).
   const logTo = (id, line) => {
@@ -105,15 +105,27 @@ async function main() {
     fs.mkdir(dir, { recursive: true }, () => fs.appendFile(path.join(dir, `${id}.log`), `${new Date().toISOString()} ${line}\n`, () => {}));
   };
 
-  for (const [what, port] of [['RAGX engine', config.ports.ragx], ['NoteX engine', config.ports.notex]]) {
-    if (!(await portFree(port))) throw new Error(`Port ${port} (${what}) is in use - is it already running, perhaps in ter-manager? Stop that, or set another port in studio.config.json.`);
-  }
-
   const engines = {};
   for (const spec of Object.values(engineSpecs(config, plugs))) {
     const e = new ManagedEngine(spec, { log: (line) => logTo(spec.id, line) });
     e.on('state', (s) => console.log(`  ${s.label.padEnd(5)} ${s.state}${s.url ? ` at ${s.url}` : ''}${s.detail ? ` - ${s.detail}` : ''}`));
     engines[spec.id] = e;
+  }
+
+  /* A port in use may be the same NoteX or RAGX, started in ter-manager: then
+   * it is used as it is, so AutomatU, ter-manager and the studio share one
+   * (t-5cb2f89c68). Anything else on the port stops the start. */
+  for (const [id, port] of [['rag', config.ports.ragx], ['notex', config.ports.notex]]) {
+    if (await portFree(port)) continue;
+    const e = engines[id];
+    const r = await e.adopt({ origin: studioOrigins(config)[0] });
+    if (r.ok) continue;
+    const what = `${e.spec.label} engine`;
+    if (r.why === 'origin') {
+      throw new Error(`${what} is already running on port ${port}, started outside CanvasX Studio (in ter-manager?), and does not let CanvasX Studio's page in.\n`
+        + `Stop it there, so CanvasX Studio starts it for both, or start it with --origin ${[...studioOrigins(config), ...(config.engineOrigins || [])].join(',')}.`);
+    }
+    throw new Error(`Port ${port} (${what}) is in use by something CanvasX Studio cannot use (${r.why}). Stop it, or set another port in studio.config.json.`);
   }
 
   const say = (s) => console.log(`  ${s}`);

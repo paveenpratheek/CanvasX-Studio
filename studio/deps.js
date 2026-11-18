@@ -197,10 +197,10 @@ export function installSteps(id, { root, plugs }) {
 /* NoteX reads its default model and the CanvasX pages its link takes from
  * its config.json, which is written before it starts (t-621a165092,
  * t-08d48066f9); whatever else the file holds is kept. */
-export function writeNotexConfig(file, { model, origins } = {}) {
+export function writeNotexConfig(file, { model, origins, keepModel = false } = {}) {
   let c = {};
   try { c = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { /* a first start */ }
-  if (model) c.arranger = { ...(c.arranger || {}), model };
+  if (model && !(keepModel && c.arranger && c.arranger.model)) c.arranger = { ...(c.arranger || {}), model };
   if (origins && origins.length) c.canvasxOrigins = [...new Set([...(Array.isArray(c.canvasxOrigins) ? c.canvasxOrigins : []), ...origins])];
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(c, null, 2));

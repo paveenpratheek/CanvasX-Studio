@@ -19,7 +19,8 @@ const MAX_LINES = 600;
 
 /* How each engine is started, from its own CLI's usage. */
 export function engineSpecs(config, plugs) {
-  const origin = studioOrigins(config).join(',');
+  // The studio's page, and any other the shared engines also serve, such as ter-manager's (t-5cb2f89c68).
+  const origin = [...new Set([...studioOrigins(config), ...(config.engineOrigins || [])])].join(',');
   const spec = (p, args) => ({
     id: p.id, label: p.label, cwd: p.repo, args, port: config.ports[p.id === 'rag' ? 'ragx' : 'notex'],
     runtimeFile: path.join(pluginDir(p), 'runtime.json'), tokenHeader: p.token, dataDir: dataDirOf(config, p.id).dir,
@@ -58,6 +59,7 @@ export class ManagedEngine extends EventEmitter {
     this.url = null;
     this.lines = [];
     this.exited = null;
+    this.shared = null; // the runtime.json of an engine started elsewhere, which the studio uses
   }
 
   set(state, detail = '') {
@@ -68,7 +70,7 @@ export class ManagedEngine extends EventEmitter {
 
   snapshot() {
     const { id, label, port } = this.spec;
-    return { id, label, port, state: this.state, detail: this.detail, pid: this.child ? this.child.pid : null, url: this.url, startedAt: this.startedAt };
+    return { id, label, port, state: this.state, detail: this.detail, pid: this.child ? this.child.pid : this.shared ? this.shared.pid : null, url: this.url, startedAt: this.startedAt, shared: Boolean(this.shared) };
   }
 
   logs() { return this.lines.slice(); }
@@ -85,7 +87,29 @@ export class ManagedEngine extends EventEmitter {
   /* Its own runtime.json, or null: one naming another pid is a leftover. */
   runtime() {
     const rt = readJson(this.spec.runtimeFile);
-    return rt && this.child && rt.pid === this.child.pid && rt.url && rt.token ? rt : null;
+    if (!rt || !rt.url || !rt.token) return null;
+    if (this.child) return rt.pid === this.child.pid ? rt : null;
+    return this.shared && rt.pid === this.shared.pid ? rt : null;
+  }
+
+  /* An engine already running, started elsewhere (ter-manager, say): used as
+   * it is when its runtime.json answers and it lets the studio's page in;
+   * never stopped by the studio (t-5cb2f89c68). */
+  async adopt({ origin }) {
+    const rt = readJson(this.spec.runtimeFile);
+    if (!rt || !rt.url || !rt.token) return { ok: false, why: 'no-runtime' };
+    let r;
+    try {
+      r = await fetch(`${rt.url}/api/state`, { headers: { [this.spec.tokenHeader]: rt.token, ...(origin ? { origin } : {}) }, signal: AbortSignal.timeout(3000) });
+    } catch (_) { return { ok: false, why: 'not-answering' }; }
+    if (r.status === 403) return { ok: false, why: 'origin' };
+    if (!r.ok) return { ok: false, why: `answered ${r.status}` };
+    this.shared = rt;
+    this.url = rt.url;
+    this.startedAt = rt.startedAt || null;
+    this.note(`already running at ${rt.url} (pid ${rt.pid}), started outside CanvasX Studio: used as it is`);
+    this.set('running', 'started outside CanvasX Studio');
+    return { ok: true };
   }
 
   async answers(rt, timeoutMs = 3000) {
@@ -97,6 +121,10 @@ export class ManagedEngine extends EventEmitter {
 
   start() {
     if (this.child) return this.snapshot();
+    if (this.shared) {
+      if (this.runtime()) return this.snapshot();
+      this.shared = null; // it went away: start one of the studio's own
+    }
     fs.mkdirSync(this.spec.dataDir, { recursive: true });
     this.url = null;
     this.startedAt = new Date().toISOString();
@@ -144,6 +172,13 @@ export class ManagedEngine extends EventEmitter {
 
   async stop({ timeoutMs = 8000 } = {}) {
     const child = this.child;
+    if (!child && this.shared) {
+      // Not the studio's to stop: whoever started it does (t-5cb2f89c68).
+      this.shared = null;
+      this.url = null;
+      this.set('stopped', 'left running where it was started');
+      return this.snapshot();
+    }
     if (!child) return this.snapshot();
     this.set('stopping');
     const rt = this.runtime();

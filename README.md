@@ -104,10 +104,26 @@ You can also set them for one run: `npm start -- --data <folder> --no-open --not
 
 If you change the CanvasX port, or serve CanvasX from elsewhere, start with `--canvasx-origin <its address>`. The studio then adds that address to NoteX's `canvasxOrigins` as well, so NoteX's CanvasX link accepts it.
 
+### One NoteX and one RAGX, shared with ter-manager
+
+A PC that also runs NoteX and RAGX in ter-manager, and tools that find NoteX through `Project NoteX/plugin/runtime.json` (AutomatU, the NoteX MCP tools), would otherwise have two of each: the studio's copy and ter-manager's, both wanting the same ports. To keep one of each, tell the studio which project folders to run them from, where they keep their data, and which other page may use them:
+
+```json
+{
+  "projects":   { "notex": "E:/Coding CLI/Project NoteX", "rag": "E:/Coding CLI/Project Harness" },
+  "engineData": { "notex": "E:/ter-manager/plugins/notex", "rag": "E:/ter-manager/plugins/rag" },
+  "engineOrigins": ["http://127.0.0.1:7070", "http://localhost:7070"]
+}
+```
+
+Then the studio runs NoteX and RAGX from those folders, on ter-manager's data, and lets ter-manager's page (7070) in as well as its own. Everything that reads those folders' `runtime.json` finds the engine the studio started.
+
+When ter-manager started them first, the studio uses them as they are, provided they let the studio's page (7075) in. It never stops an engine it did not start. If one refuses the studio, its start command in ter-manager needs `--origin http://127.0.0.1:7070,http://localhost:7070,http://127.0.0.1:7075,http://localhost:7075`. Without that, stop it in ter-manager and let the studio start it for both.
+
 ## When something is wrong
 
 - **An engine dot is red.** Click its name in the top bar. Its log opens, with **Restart** and **Stop**.
-- **"Port … is in use".** Something else, perhaps another copy, already uses that port. Stop it, or choose another port as described above. Port 9075 in use is not an error: it may be the CanvasX you have open.
+- **"Port … is in use".** Something else, perhaps another copy, already uses that port. Stop it, or choose another port as described above. Port 9075 in use is not an error: it may be the CanvasX you have open. A NoteX or RAGX already running there is used as it is, if it lets the studio in (see **One NoteX and one RAGX** above).
 - **RAGX says Ollama is not running.** Use the button RAGX shows. It opens Ollama in a terminal window you can watch.
 
 ## How it works

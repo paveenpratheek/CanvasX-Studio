@@ -46,7 +46,7 @@ async function main() {
   ok(`Node.js ${process.version}`);
 
   // The projects themselves.
-  const plugs = plugins();
+  const plugs = plugins(ROOT, loadConfig().projects);
   const absent = () => [...Object.values(plugs).map(cliOf), path.join(ROOT, 'canvasx', 'index.html')].filter((f) => !fs.existsSync(f));
   if (absent().length) {
     if (fs.existsSync(path.join(ROOT, '.git'))) {

@@ -5,6 +5,12 @@
  *                        notex, canvasx, phone }, open, setup }
  *                        - setup is the first-run setup's progress
  *                        (t-2b5970444b), written by the studio itself
+ *                        - projects { notex, rag }, engineData { notex, rag }
+ *                        and engineOrigins: run NoteX and RAGX from other
+ *                        folders, keep their data elsewhere, and let other
+ *                        pages in - for a PC that also runs them in
+ *                        ter-manager, so both share one NoteX and one RAGX
+ *                        (t-5cb2f89c68)
  *
  * The data folder holds plugins/<id> for each engine, the layout
  * ter-manager gives its plugins, so RAGX finds NoteX's documents at
@@ -35,11 +41,13 @@ export const DEFAULTS = Object.freeze({
   open: true,
 });
 
-/* The two pages the studio hosts, by the ids their plugin.json give. */
-export function plugins(root = ROOT) {
+/* The two pages the studio hosts, by the ids their plugin.json give - from
+ * the submodules, or from the folders studio.config.json names (t-5cb2f89c68). */
+export function plugins(root = ROOT, projects = {}) {
+  const at = (id, sub) => (projects && projects[id] ? path.resolve(projects[id]) : path.join(root, sub));
   return {
-    notex: { id: 'notex', label: 'NoteX', hint: 'Canvases, inbox, agents, phone', repo: path.join(root, 'notex'), token: 'x-notex-token' },
-    rag: { id: 'rag', label: 'RAGX', hint: 'Ask your files', repo: path.join(root, 'ragx'), token: 'x-rag-token' },
+    notex: { id: 'notex', label: 'NoteX', hint: 'Canvases, inbox, agents, phone', repo: at('notex', 'notex'), token: 'x-notex-token' },
+    rag: { id: 'rag', label: 'RAGX', hint: 'Ask your files', repo: at('rag', 'ragx'), token: 'x-rag-token' },
   };
 }
 
@@ -82,7 +90,20 @@ export function loadConfig({ file = CONFIG_FILE, overrides = {} } = {}) {
   const setup = fromFile.setup && typeof fromFile.setup === 'object' ? fromFile.setup : {};
   // Other addresses CanvasX is served from, beside the studio's own (t-08d48066f9).
   const extra = [...(Array.isArray(fromFile.canvasxOrigins) ? fromFile.canvasxOrigins : []), ...(overrides.canvasxOrigins || [])].map(origin);
-  return { dataDir, ports, open: Boolean(open), file, setup, canvasxOrigins: [...new Set(extra)] };
+  // Shared engines (t-5cb2f89c68): their folders, their data, and other pages they let in.
+  const paths = (o, what) => {
+    const out = {};
+    for (const id of ['notex', 'rag']) {
+      if (!o || o[id] == null) continue;
+      if (!path.isAbsolute(String(o[id]))) throw new Error(`${what}.${id} in ${file} must be a full path, not ${JSON.stringify(o[id])}.`);
+      out[id] = path.resolve(String(o[id]));
+    }
+    return out;
+  };
+  const projects = paths(fromFile.projects, 'projects');
+  const engineData = paths(fromFile.engineData, 'engineData');
+  const engineOrigins = [...new Set((Array.isArray(fromFile.engineOrigins) ? fromFile.engineOrigins : []).map(origin))];
+  return { dataDir, ports, open: Boolean(open), file, setup, canvasxOrigins: [...new Set(extra)], projects, engineData, engineOrigins };
 }
 
 /* Some settings written into the file, keeping whatever else it holds. */
@@ -95,6 +116,8 @@ export function saveConfigFile(file, patch) {
 
 /* Where a plugin keeps what it must not lose, as ter-manager's host.dataDir answers. */
 export function dataDirOf(config, id) {
+  const shared = config.engineData && config.engineData[id];
+  if (shared) return { dir: shared, saveDir: path.dirname(path.dirname(shared)) };
   return { dir: path.join(config.dataDir, 'plugins', id), saveDir: config.dataDir };
 }
 
