@@ -6,6 +6,9 @@
  *   .terminal.open(opts)    { cwd, cmd, title }
  *   .storage.get/set/remove remembered per page by the studio
  *   .theme.get/onChange     the palette, applied to <html> for the page
+ *   .on(name, fn)           other things the studio asks of the page, such
+ *                           as 'open' a pinned RAGX conversation
+ *                           (t-1b6a07a0c5); ter-manager has no .on
  *
  * Messages are { __tm: 1, id, method, params } up and { __tm: 1, id, ok,
  * result | error } back, always to this page's own origin. Opened on its
@@ -32,6 +35,7 @@
   let seq = 0;
   const pending = new Map();
   const listeners = [];
+  const handlers = new Map(); // event name -> functions
   let theme = { vars: {}, attrs: {} };
 
   function call(method, params) {
@@ -53,6 +57,10 @@
     const m = e.data;
     if (!m || m.__tm !== 1) return;
     if (m.event === 'theme') { take(m.theme); return; }
+    if (typeof m.event === 'string') {
+      (handlers.get(m.event) || []).forEach((fn) => { try { fn(m.detail); } catch (err) { console.error(err); } });
+      return;
+    }
     const p = pending.get(m.id);
     if (!p) return;
     pending.delete(m.id);
@@ -92,6 +100,13 @@
       get(key) { return call('storage.get', { key: String(key) }); },
       set(key, value) { return call('storage.set', { key: String(key), value }); },
       remove(key) { return call('storage.remove', { key: String(key) }); },
+    },
+    on(name, fn) {
+      if (typeof fn !== 'function') return () => {};
+      const list = handlers.get(String(name)) || [];
+      list.push(fn);
+      handlers.set(String(name), list);
+      return () => { const i = list.indexOf(fn); if (i >= 0) list.splice(i, 1); };
     },
     theme: {
       get() { return theme; },

@@ -151,6 +151,13 @@ function tabIcon(id) {
 }
 
 function build() {
+  const askedConv = Number(new URLSearchParams(location.search).get('conversation'));
+  if (askedConv > 0) {
+    try {
+      localStorage.setItem(`${STORE_PREFIX}rag.tab`, JSON.stringify('ask'));
+      localStorage.setItem(`${STORE_PREFIX}rag.conv`, JSON.stringify(askedConv));
+    } catch (_) { /* private window */ }
+  }
   for (const p of BOOT.plugins) {
     const b = el('button', 'tab');
     b.type = 'button';
@@ -199,8 +206,45 @@ function renderEngines() {
   if (logsFor) renderLogsHead();
 }
 
+/* ------------------------------------------------- pinned conversations */
+
+/* RAGX's pinned conversations (t-1b6a07a0c5): in the studio's own sidebar,
+ * and told to CanvasX, whose sidebar shows them whichever view is open. */
+let pins = [];
+function setPins(list) {
+  const next = Array.isArray(list) ? list : [];
+  if (JSON.stringify(next) === JSON.stringify(pins)) return;
+  pins = next;
+  toParent({ event: 'pins', pins });
+  const box = $('pins');
+  if (!box) return;
+  box.hidden = !pins.length;
+  const rows = pins.map((p) => {
+    const b = el('button', 'pin-row');
+    b.type = 'button';
+    b.title = p.title;
+    b.append(tabIcon('rag'), el('span', 'pin-title', p.title));
+    b.addEventListener('click', () => openPinned(p.id));
+    return b;
+  });
+  box.replaceChildren(el('div', 'pins-h', 'Pinned'), ...rows);
+}
+
+/* RAGX opens on the conversation: told now if its page listens, and
+ * remembered for its page to open when it loads. */
+function openPinned(id) {
+  if (!(Number(id) > 0)) return;
+  try {
+    localStorage.setItem(`${STORE_PREFIX}rag.tab`, JSON.stringify('ask'));
+    localStorage.setItem(`${STORE_PREFIX}rag.conv`, JSON.stringify(Number(id)));
+  } catch (_) { /* private window */ }
+  show('rag');
+  const f = frames.get('rag');
+  try { f.contentWindow.postMessage({ __tm: 1, event: 'open', detail: { conversation: Number(id) } }, location.origin); } catch (_) { /* loading: it opens what was remembered */ }
+}
+
 async function pollEngines() {
-  try { engines = (await hostApi('GET', 'status')).engines; renderEngines(); } catch (err) {
+  try { const st = await hostApi('GET', 'status'); engines = st.engines; renderEngines(); setPins(st.pins); } catch (err) {
     engines = engines.map((e) => ({ ...e, state: 'failed', detail: 'the studio is not answering - is its terminal still open?' }));
     renderEngines();
   }
@@ -283,7 +327,10 @@ if (EMBED) {
     if (!m || m.notexStudio !== 1) return;
     if (themeWord(m.theme)) { forcedMode = m.theme; applyTheme(); }
     if (m.show === 'setup') setup.open({ force: true });
-    else if (frames.has(m.show)) {
+    else if (m.show === 'rag' && Number(m.conversation) > 0) {
+      if (setup.shown() && !setup.needed()) setup.close();
+      openPinned(Number(m.conversation));
+    } else if (frames.has(m.show)) {
       // A setup still needed stays in front; one opened again from Setup gives way.
       if (setup.shown() && !setup.needed()) setup.close();
       show(m.show);

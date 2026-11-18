@@ -13,7 +13,8 @@
  *   /api/hello             who answers here and whether its setup is done,
  *                          with no token, only to CanvasX's pages, which
  *                          may also show the studio page in a frame
- *                          (t-c614bd5011)
+ *                          (t-c614bd5011); and the RAGX conversations the
+ *                          user pinned, for CanvasX's sidebar (t-1b6a07a0c5)
  *
  * The CanvasX server serves the CanvasX folder as `python -m http.server`
  * would, on the port NoteX's CanvasX link accepts (t-b2251cde5d).
@@ -126,13 +127,33 @@ export function createStudioServer({ config, plugs, engines, firstRun = null, to
   const origins = studioOrigins(config);
   const same = (a, b) => { const x = Buffer.from(String(a || '')), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
 
+  /* RAGX's pinned conversations, for the sidebars (t-1b6a07a0c5): their ids
+   * and titles only, asked of the engine at most every 2 s; the last list
+   * stands while it does not answer. */
+  const pinned = { at: 0, list: [] };
+  async function pins() {
+    const e = engines.rag;
+    const rt = e && e.state === 'running' && typeof e.runtime === 'function' ? e.runtime() : null;
+    if (!rt) { pinned.list = []; return pinned.list; }
+    if (Date.now() - pinned.at < 2000) return pinned.list;
+    pinned.at = Date.now();
+    try {
+      const r = await fetch(`${rt.url}/api/conversations`, { headers: { [e.spec.tokenHeader]: rt.token, 'x-rag-client': 'plugin' }, signal: AbortSignal.timeout(2000) });
+      if (r.ok) {
+        const { conversations = [] } = await r.json();
+        pinned.list = conversations.filter((c) => c.pinned_at).map((c) => ({ id: Number(c.id), title: String(c.title || '').slice(0, 200) }));
+      }
+    } catch (_) { /* the last list stands */ }
+    return pinned.list;
+  }
+
   async function api(req, res, url) {
     if (req.headers.origin && !origins.includes(req.headers.origin)) return refuse(res, 403, `Requests from ${req.headers.origin} are not accepted.`);
     if (!same(req.headers['x-studio-token'], token)) return refuse(res, 401, 'Missing or wrong X-Studio-Token - reload the studio page.');
     const route = url.pathname.slice('/api/host/'.length);
     const plugin = (id) => plugs[id] || null;
 
-    if (req.method === 'GET' && route === 'status') return json(res, 200, { engines: Object.values(engines).map((e) => e.snapshot()), dataDir: config.dataDir, ports: config.ports });
+    if (req.method === 'GET' && route === 'status') return json(res, 200, { engines: Object.values(engines).map((e) => e.snapshot()), dataDir: config.dataDir, ports: config.ports, pins: await pins() });
     if (req.method === 'GET' && route === 'logs') {
       const e = engines[url.searchParams.get('id')];
       return e ? json(res, 200, { id: e.spec.id, lines: e.logs() }) : refuse(res, 404, 'No such engine.');
@@ -225,6 +246,8 @@ export function createStudioServer({ config, plugs, engines, firstRun = null, to
       studio: 'CanvasX Studio', version: VERSION, setupDone, launcher: launcherSeen.on,
       page: `http://127.0.0.1:${port}/`,
       engines: Object.values(engines).map((e) => ({ id: e.spec.id, label: e.spec.label, state: e.state })),
+      // What the user pinned in RAGX, for CanvasX's sidebar (t-1b6a07a0c5).
+      pins: await pins(),
     });
   }
 
